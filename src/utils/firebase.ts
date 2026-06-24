@@ -30,11 +30,11 @@ const appId = metaEnv.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
 // Determine if we are running in production outside the AI Studio preview environment (e.g. Vercel)
 const isOutsideAIStudio = typeof window !== 'undefined' && 
   window.location.hostname !== 'localhost' && 
+  window.location.hostname !== '127.0.0.1' &&
   !window.location.hostname.includes('run.app');
 
-// If outside AI Studio, default to '(default)' since they won't have our workspace custom database ID in their own project
 const firestoreDatabaseId = isOutsideAIStudio
-  ? (metaEnv.VITE_FIREBASE_DATABASE_ID || '(default)')
+  ? '(default)'
   : (metaEnv.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)');
 
 // Initialize Firebase App
@@ -50,10 +50,28 @@ const app = initializeApp({
 // We use a let-binding for db to allow fallback to the '(default)' database if the custom one is not found or fails
 export let db = getFirestore(app, firestoreDatabaseId || '(default)');
 
+// Helper function to enforce a timeout on asynchronous operations
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 4000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Timeout of ${timeoutMs}ms exceeded while connecting to Firebase`));
+    }, timeoutMs);
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 // Test connection and auto-recovery to (default) database if custom db is not accessible
 async function testAndRecoverConnection() {
   try {
-    await getDocFromServer(doc(db, 'people', 'ping'));
+    await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 3000);
     console.log(`Firebase connection to database "${firestoreDatabaseId}" verified successfully!`);
   } catch (error: any) {
     console.warn(`Connection to database "${firestoreDatabaseId}" failed:`, error);
@@ -61,7 +79,7 @@ async function testAndRecoverConnection() {
       console.log("Attempting to fall back to '(default)' database...");
       try {
         db = getFirestore(app, '(default)');
-        await getDocFromServer(doc(db, 'people', 'ping'));
+        await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 3000);
         console.log("Fallback to '(default)' database succeeded!");
       } catch (fallbackError) {
         console.error("Fallback to '(default)' database also failed:", fallbackError);
@@ -75,7 +93,8 @@ testAndRecoverConnection();
 
 export async function fetchPeopleFromFirebase(): Promise<Person[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, 'people'));
+    // Wrap with a timeout to fail fast and fall back to local storage instead of hanging forever
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'people')), 4000);
     const list: Person[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Person);
@@ -128,7 +147,7 @@ export async function savePeopleBatchToFirebase(peopleList: Person[]): Promise<v
 
 export async function fetchFamiliesFromFirebase(): Promise<Family[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, 'families'));
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'families')), 4000);
     const list: Family[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Family);
@@ -182,7 +201,7 @@ const STRUCTURE_DOC_ID = 'current_structure';
 
 export async function fetchStructureFromFirebase(): Promise<JohreiCenterStructure | null> {
   try {
-    const docSnap = await getDoc(doc(db, 'structures', STRUCTURE_DOC_ID));
+    const docSnap = await withTimeout(getDoc(doc(db, 'structures', STRUCTURE_DOC_ID)), 4000);
     if (docSnap.exists()) {
       return docSnap.data() as JohreiCenterStructure;
     }
