@@ -6,18 +6,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // People collection
-    match /people/{personId} {
+    // People collection (recursive wildcard for arbitrary IDs/slashes)
+    match /people/{document=**} {
       allow read, write: if true;
     }
 
     // Families collection
-    match /families/{familyId} {
+    match /families/{document=**} {
       allow read, write: if true;
     }
 
     // Structures collection
-    match /structures/{structureId} {
+    match /structures/{document=**} {
       allow read, write: if true;
     }
   }

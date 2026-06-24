@@ -18,29 +18,58 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Person, Family, JohreiCenterStructure } from '../types';
 
+// Load config from environment variables (useful for production Vercel/Netlify/Github Pages) or fallback to local JSON config
+const metaEnv = (import.meta as any).env || {};
+const apiKey = metaEnv.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey;
+const authDomain = metaEnv.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain;
+const projectId = metaEnv.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId;
+const storageBucket = metaEnv.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket;
+const messagingSenderId = metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId;
+const appId = metaEnv.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
+
+// Determine if we are running in production outside the AI Studio preview environment (e.g. Vercel)
+const isOutsideAIStudio = typeof window !== 'undefined' && 
+  window.location.hostname !== 'localhost' && 
+  !window.location.hostname.includes('run.app');
+
+// If outside AI Studio, default to '(default)' since they won't have our workspace custom database ID in their own project
+const firestoreDatabaseId = isOutsideAIStudio
+  ? (metaEnv.VITE_FIREBASE_DATABASE_ID || '(default)')
+  : (metaEnv.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)');
+
 // Initialize Firebase App
 const app = initializeApp({
-  apiKey: firebaseConfig.apiKey,
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-  messagingSenderId: firebaseConfig.messagingSenderId,
-  appId: firebaseConfig.appId,
+  apiKey,
+  authDomain,
+  projectId,
+  storageBucket,
+  messagingSenderId,
+  appId,
 });
 
-// Initialize Firestore with custom database ID via getFirestore(app, databaseId)
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+// We use a let-binding for db to allow fallback to the '(default)' database if the custom one is not found or fails
+export let db = getFirestore(app, firestoreDatabaseId || '(default)');
 
-// Test connection on boot to comply with validation directive
-async function testConnection() {
+// Test connection and auto-recovery to (default) database if custom db is not accessible
+async function testAndRecoverConnection() {
   try {
     await getDocFromServer(doc(db, 'people', 'ping'));
-    console.log("Firebase connection verified successfully!");
-  } catch (error) {
-    console.warn("Could not connect to online Firestore directly, operating in offline/local fallback mode:", error);
+    console.log(`Firebase connection to database "${firestoreDatabaseId}" verified successfully!`);
+  } catch (error: any) {
+    console.warn(`Connection to database "${firestoreDatabaseId}" failed:`, error);
+    if (firestoreDatabaseId && firestoreDatabaseId !== '(default)') {
+      console.log("Attempting to fall back to '(default)' database...");
+      try {
+        db = getFirestore(app, '(default)');
+        await getDocFromServer(doc(db, 'people', 'ping'));
+        console.log("Fallback to '(default)' database succeeded!");
+      } catch (fallbackError) {
+        console.error("Fallback to '(default)' database also failed:", fallbackError);
+      }
+    }
   }
 }
-testConnection();
+testAndRecoverConnection();
 
 // --- PEOPLE API ---
 
