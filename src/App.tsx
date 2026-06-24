@@ -34,11 +34,11 @@ import {
 
 const DEFAULT_STRUCTURE: JohreiCenterStructure = {
   amList: [
-    { id: 'am-1', name: 'PROF DANI', sector: 'CENTRO-NORTE' },
-    { id: 'am-2', name: 'MARISA', sector: 'SUL' },
-    { id: 'am-3', name: 'MÁRIO TANAKA', sector: 'CENTRO-NORTE' },
-    { id: 'am-4', name: 'MINISTRO ROBERTO', sector: 'SUL' },
-    { id: 'am-5', name: 'MINISTRA CLARA', sector: 'LESTE' }
+    { id: 'am-1', name: 'Daniela Almeida', sector: 'CENTRO-NORTE' },
+    { id: 'am-2', name: 'Graziela Paiva', sector: 'SUL' },
+    { id: 'am-3', name: 'Min Clelia', sector: 'ILHA BELA' },
+    { id: 'am-4', name: 'Min CLelia', sector: 'SÃO SEBASTIÃO' },
+    { id: 'am-5', name: 'Anna Julia', sector: 'INDAIÁ-SERRA' }
   ],
   afList: [
     { id: 'af-1', name: 'YOKO', sector: 'CENTRO-NORTE' },
@@ -525,9 +525,8 @@ export default function App() {
           <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200/40 dark:border-white/5 bg-slate-500/[0.02] dark:bg-white/[0.01]">
             <div className="space-y-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white shadow-md">
-                  <Landmark className="w-5 h-5" />
-                </div>
+               {/*} <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white shadow-md">*/}
+                  <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 object-contain" /> {/*substituindo landmark*/}
                 <div>
                   <span className="font-semibold text-lg tracking-tight block font-display">Johrei Center</span>
                   <span className="text-[10px] text-zinc-400 font-mono tracking-wider">GESTÃO & CRM</span>
@@ -713,13 +712,13 @@ export default function App() {
             {/* Header / Logo */}
             <div className="p-4 border-b border-slate-200/40 dark:border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <span className="p-1.5 bg-teal-600 rounded-lg text-white font-bold shadow-xs">
-                  <Landmark className="w-5 h-5 flex-shrink-0" />
+                <span className="p-1.5 bg-teal-00 rounded-lg text-white font-bold shadow-xs">
+                  <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 object-contain" /> {/*substituindo landmark*/}
                 </span>
                 {!isSidebarCollapsed && (
                   <div>
-                    <span className="font-semibold text-sm tracking-tight block font-display truncate">Johrei Center</span>
-                    <span className="text-[9px] text-zinc-400 font-mono tracking-wider">CRM</span>
+                    <span className="font-semibold text-sm tracking-tight block font-display truncate">Caraguatatuba</span>
+                    <span className="text-[9px] text-zinc-400 font-mono tracking-wider"></span>
                   </div>
                 )}
               </div>
