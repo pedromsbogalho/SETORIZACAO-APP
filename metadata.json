@@ -1,0 +1,6 @@
+{
+  "name": "Gestão de Johrei Center",
+  "description": "CRM Religioso e gestão de membros, frequentadores, setores e jornada espiritual para a Igreja Messiânica Mundial do Brasil.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
