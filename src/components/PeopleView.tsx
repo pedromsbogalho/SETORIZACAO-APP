@@ -270,9 +270,8 @@ export default function PeopleView({
     filtered = filtered.filter(p => p.am === currentAMName || p.am === '');
   }
 
-  if (filterType !== 'ALL') {
-    filtered = filtered.filter(p => p.tipoCadastro === filterType);
-  }
+  // Filtro de Grau (tipoCadastro) removido: sempre mostra todos os membros.
+
 
   if (filterStatus !== 'ALL') {
     filtered = filtered.filter(p => p.statusAtual === filterStatus);
@@ -297,16 +296,40 @@ export default function PeopleView({
   // Export
   const handleExportCSV = () => {
     const headers = [
-      'Código Cadastro', 'Nome', 'Tipo Cadastro', 'Status atual', 
-      'Nascimento', 'Idade', 'Celular Principal', 'Email', 'AM', 'SETOR2', 'AF2', 
-      'Bairro Ajustado', 'ID Familia', 'Jornada Etapa'
+      'Código Cadastro',
+      'Nome',
+      'Status atual',
+      'Nascimento',
+      'Idade',
+      'Tempo Membro',
+      'Celular Principal',
+      'Email',
+      'AM',
+      'SETOR2',
+      'AF2',
+      'Bairro Ajustado',
+      'ID Familia',
+      'Jornada Etapa'
     ];
+
     
     const rows = filtered.map(p => [
-      p.id, p.nome, p.tipoCadastro, p.statusAtual,
-      p.nascimento, p.idade, p.celularPrincipal, p.email, p.am, p.setor2, p.af2,
-      p.bairroAjustado, p.idFamilia, p.jornadaEtapa
+      p.id,
+      p.nome,
+      p.statusAtual,
+      p.nascimento,
+      p.idade,
+      p.tempoMembro,
+      p.celularPrincipal,
+      p.email,
+      p.am,
+      p.setor2,
+      p.af2,
+      p.bairroAjustado,
+      p.idFamilia,
+      p.jornadaEtapa
     ]);
+
 
     const csvContent = [
       headers.join(';'),
@@ -348,10 +371,11 @@ export default function PeopleView({
           valA = a.nome || '';
           valB = b.nome || '';
           break;
-        case 'tipoCadastro':
-          valA = a.tipoCadastro || '';
-          valB = b.tipoCadastro || '';
+        case 'tempoMembro':
+          valA = a.tempoMembro || '';
+          valB = b.tempoMembro || '';
           break;
+
         case 'setor2':
           valA = a.setor2 || '';
           valB = b.setor2 || '';
@@ -452,19 +476,9 @@ export default function PeopleView({
           </div>
 
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Outorga filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Grau:</span>
-              <select 
-                value={filterType}
-                onChange={(e) => { setFilterType(e.target.value); setPageIndex(0); }}
-                className={`text-xs py-1.5 px-2 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none`}
-              >
-                <option value="ALL">Todos os Graus</option>
-                <option value="Ohikari">Ohikari</option>
-                <option value="Okomitama">Okomitama</option>
-              </select>
-            </div>
+              {/* Outorga filter removido (Grau) */}
+              <div className="hidden" aria-hidden="true" />
+
 
             {/* Status filter */}
             <div className="flex items-center gap-1.5">
@@ -549,13 +563,15 @@ export default function PeopleView({
                   </div>
                 </th>
                 <th 
-                  onClick={() => handleSort('tipoCadastro')} 
+                  onClick={() => handleSort('tempoMembro')}
                   className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
                 >
                   <div className="flex items-center gap-1">
-                    Tipo {sortField === 'tipoCadastro' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    Tempo de Membro {sortField === 'tempoMembro' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
                 </th>
+
+
                 <th 
                   onClick={() => handleSort('setor2')} 
                   className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
@@ -609,9 +625,10 @@ export default function PeopleView({
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-semibold text-teal-600 dark:text-teal-400">
-                      {person.tipoCadastro}
+                    <td className="py-3 px-4 font-mono">
+                      {person.tempoMembro || <span className="text-zinc-400 italic">N/A</span>}
                     </td>
+
                     <td className="py-3 px-4">
                       <div className="font-semibold">{person.setor2 || <span className="text-red-400 italic">Sem Setor</span>}</div>
                       <div className="text-xxs text-zinc-400">AM: {displayAM || <span className="text-red-400/80 italic">Sem AM</span>}</div>
