@@ -56,8 +56,9 @@ export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
-  // Theme state
-  const [isDark, setIsDark] = useState<boolean>(false);
+  // Theme fixa: removido toggle (mantemos tema light por simplicidade)
+  const isDark = false;
+
 
   // Sidebar responsive collapse states
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -139,10 +140,7 @@ export default function App() {
 
   // Load from Firebase on application start
   useEffect(() => {
-    const cachedTheme = localStorage.getItem('jc_theme');
-    if (cachedTheme) {
-      setIsDark(cachedTheme === 'dark');
-    }
+
 
     async function loadData() {
       setIsLoading(true);
@@ -285,20 +283,44 @@ export default function App() {
   };
 
   const handleUpdateStructure = async (newStructure: JohreiCenterStructure) => {
+    // Atualiza structure e imediatamente re-normaliza o campo dos membros para refletir o organograma.
+    // Regra: 
+    // - se um AM existir na structure para o setor do membro (setor2), mantém `am`.
+    // - se não existir (responsável removido), limpa `am`.
+    // - setor2 fica preservado (como combinado pelo usuário).
+    const nextPeople = people.map(p => {
+      const setor = (p.setor2 || '').toUpperCase();
+      const matchingAM = newStructure.amList.find(am => am.sector.toUpperCase() === setor);
+      const matchingAFs = newStructure.afList.filter(af => af.sector.toUpperCase() === setor);
+
+      const keepAM = matchingAM && p.am && p.am.toUpperCase() === matchingAM.name.toUpperCase();
+      const keepAF = matchingAFs.some(af => p.af2 && p.af2.toUpperCase() === af.name.toUpperCase());
+
+      return {
+        ...p,
+        am: keepAM ? p.am : '',
+        af2: keepAF ? p.af2 : ''
+      };
+    });
+
+    // Se algum membro tiver AM/AF vazio mas existe o responsável do setor, NÃO auto-preenche para evitar sobrescrita.
+
+    const enriched = enrichPeopleWithFamilyIds(nextPeople);
+    setPeople(enriched);
+    localStorage.setItem('jc_people', JSON.stringify(enriched));
+
     setStructure(newStructure);
     localStorage.setItem('jc_structure', JSON.stringify(newStructure));
     try {
+      await savePeopleBatchToFirebase(enriched);
       await saveStructureToFirebase(newStructure);
     } catch (err) {
-      console.error("Error syncing updated structure to Firebase:", err);
+      console.error("Error syncing updated structure/people to Firebase:", err);
     }
   };
 
-  const toggleTheme = () => {
-    const nextTheme = !isDark;
-    setIsDark(nextTheme);
-    localStorage.setItem('jc_theme', nextTheme ? 'dark' : 'light');
-  };
+
+
 
   // Helper for quick load demo database
   const handleLoadDemoData = async () => {
@@ -462,7 +484,10 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: FileText }
   ];
 
+  // Reinforce: theme fixa (isDark sempre false), remover import e componentes se não usados.
+
   // Calculate total alerts to display inside badge
+
   const missingPostOutorgaCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.tipoCadastro === 'Ohikari' && !Object.values(p.cursoPosOutorga.aulas).every(v => v === 'Concluido')).length;
   const noWhatsCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.jornadaEtapa !== 'Primeiro atendimento' && !p.gruposWhats.grupoSetor && !p.gruposWhats.grupoGeral).length;
   
@@ -554,13 +579,7 @@ export default function App() {
 
             <div className="pt-8 text-[11px] font-mono text-zinc-400 flex items-center justify-between">
               <span>Unidade: Caraguatatuba</span>
-              <button
-                onClick={toggleTheme}
-                className={`py-1.5 px-3 rounded-lg border text-xxs font-bold hover:bg-slate-100 dark:hover:bg-zinc-850/60 transition-all flex items-center gap-1 cursor-pointer ${isDark ? 'border-zinc-800 text-zinc-300' : 'border-slate-200 text-slate-700'}`}
-              >
-                {isDark ? <Moon className="w-3.5 h-3.5 text-teal-400" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
-                {isDark ? 'Escuro' : 'Claro'}
-              </button>
+
             </div>
           </div>
 
@@ -758,21 +777,8 @@ export default function App() {
 
           {/* Footer controls (Theme & Role switchers) */}
           <div className="p-3 border-t border-slate-200/40 dark:border-white/5 space-y-2">
-            {/* Theme toggle */}
-            <button 
-              id="btn-toggle-theme"
-              onClick={toggleTheme}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xxs font-semibold rounded-lg border cursor-pointer ${
-                isDark ? 'border-zinc-850 hover:bg-zinc-850' : 'border-slate-200/60 hover:bg-slate-50'
-              }`}
-            >
-              <span className="flex items-center gap-1.5 truncate">
-                {isDark ? <Moon className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" /> : <Sun className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
-                {!isSidebarCollapsed && `Tema ${isDark ? 'Escuro' : 'Claro'}`}
-              </span>
-            </button>
-
             {/* Profile access switcher */}
+
             {!isSidebarCollapsed && (
               <div className={`p-2.5 rounded-lg text-xxs ${isDark ? 'bg-zinc-950/40' : 'bg-slate-100/40'} border ${isDark ? 'border-zinc-850' : 'border-slate-200/50'} backdrop-blur-xs`}>
                 <div className="flex items-center gap-1 mb-1 text-zinc-400 font-mono uppercase truncate">
