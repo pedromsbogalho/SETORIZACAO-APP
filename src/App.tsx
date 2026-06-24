@@ -814,25 +814,13 @@ export default function App() {
         <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
           
           {/* Top minimal bar with hamburger trigger on mobile */}
-          <header className="px-6 py-4 flex justify-between items-center glass-header">
-            <div className="flex items-center gap-2">
-              {/* Hamburger drawer trigger */}
-              <button 
-                onClick={() => setIsMobileSidebarOpen(true)}
-                className="md:hidden p-1.5 -ml-1 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-              <span className="text-xxs font-mono uppercase text-zinc-400 tracking-wider truncate max-w-[120px] sm:max-w-none">Unidade: Caraguatatuba</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-xxs font-semibold bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full flex items-center gap-1 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                CRM Conectado
-              </span>
-              <span className="text-xxs text-zinc-400 font-mono hidden sm:inline">2026-06-23 UTC</span>
-            </div>
+          <header className="px-6 py-4 flex items-center glass-header md:hidden">
+            <button 
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="p-1.5 -ml-1 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
           </header>
 
           {/* Tab View switching workspace */}

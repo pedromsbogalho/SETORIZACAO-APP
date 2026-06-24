@@ -71,9 +71,25 @@ export function parseCSV(text: string): Partial<Person>[] {
     if (!nome) continue; // Skip empty rows
 
     const subtipoRaw = getRowValue(['SUBTIPO CADASTRO', 'SUBTIPO_CADASTRO', 'SUBTIPO']).trim().toUpperCase();
-    const subtipo = (subtipoRaw === 'MEMBRO' || subtipoRaw.includes('MEMBRO')) ? 'MEMBRO' : 'FREQUENTADOR';
+    const tipoRaw = getRowValue(['TIPO CADASTRO', 'TIPO_CADASTRO', 'TIPO']).trim().toUpperCase();
+    const dataOutorga = getRowValue(['DATA OUTORGA', 'OUTORGA', 'DATA_OUTORGA']).trim();
+
+    let subtipo: SubtipoCadastro = 'FREQUENTADOR';
+    if (
+      subtipoRaw === 'MEMBRO' ||
+      subtipoRaw.includes('MEMBRO') ||
+      tipoRaw === 'OHIKARI' ||
+      tipoRaw.includes('OHIKARI') ||
+      tipoRaw === 'MEMBRO' ||
+      tipoRaw.includes('MEMBRO') ||
+      tipoRaw.includes('OUTORGA') ||
+      tipoRaw.includes('OUTORGADO') ||
+      (dataOutorga && dataOutorga !== '-' && dataOutorga !== 'N/A' && dataOutorga !== 'SEM DATA' && dataOutorga.length > 2)
+    ) {
+      subtipo = 'MEMBRO';
+    }
     
-    const tipo = getRowValue(['TIPO CADASTRO', 'TIPO_CADASTRO', 'TIPO']) || (subtipo === 'MEMBRO' ? 'Ohikari' : 'Frequente');
+    const tipo = getRowValue(['TIPO CADASTRO', 'TIPO_CADASTRO', 'TIPO']).trim() || (subtipo === 'MEMBRO' ? 'Ohikari' : 'Frequente');
     const status = (getRowValue(['STATUS ATUAL', 'STATUS_ATUAL', 'STATUS']) || 'ATIVO').toUpperCase() as StatusAtual;
     const idade = parseInt(getRowValue(['IDADE', 'AGE']) || '0') || 40;
     const nascimento = getRowValue(['NASCIMENTO', 'BIRTH', 'DATA NASCIMENTO']) || '1980-01-01';
@@ -89,7 +105,6 @@ export function parseCSV(text: string): Partial<Person>[] {
     const af2 = getRowValue(['AF2', 'AF']) || '';
     const endGoogle = getRowValue(['END GOOGLE', 'GOOGLE ADDRESS']) || '';
     const bairro = getRowValue(['BAIRRO AJUSTADO', 'BAIRRO', 'NEIGHBORHOOD']) || '';
-    const dataOutorga = getRowValue(['DATA OUTORGA', 'OUTORGA', 'DATA_OUTORGA']) || '';
     const tempoMembro = getRowValue(['TEMPO MEMBRO', 'TEMPO_MEMBRO', 'MEMBERSHIP_TIME']) || '';
     const anoOutorga = getRowValue(['ANO OUTORGA', 'ANO_OUTORGA', 'YEAR_OUTORGA']) || '';
     const idFamilia = getRowValue(['ID FAMILIA', 'ID_FAMILIA', 'FAMILIA', 'FAMILY']) || `FAM-${Math.floor(Math.random() * 900) + 100}`;
