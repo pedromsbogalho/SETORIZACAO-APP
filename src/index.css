@@ -72,3 +72,11 @@ body {
   background: rgba(13, 148, 136, 0.45);
 }
 
+/* Mobile table: remove horizontal scroll so rows fit viewport */
+@media (max-width: 768px) {
+  .custom-scrollbar {
+    overflow-x: hidden !important;
+  }
+}
+
+
