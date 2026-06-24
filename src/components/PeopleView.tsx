@@ -592,8 +592,9 @@ export default function PeopleView({
                   FALECIDO: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400',
                 };
 
+                // Prioriza o AM salvo no cadastro do membro; fallback para o AM da estrutura do setor
                 const sectorAM = structure.amList.find(am => am.sector.toUpperCase() === (person.setor2 || '').toUpperCase());
-                const displayAM = sectorAM ? sectorAM.name : (person.am || '');
+                const displayAM = person.am || (sectorAM ? sectorAM.name : '');
 
                 return (
                   <tr key={person.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-all">
@@ -617,7 +618,13 @@ export default function PeopleView({
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-medium">{person.bairroAjustado || <span className="text-zinc-400 font-mono">N/A</span>}</div>
-                      <div className="text-xxs text-zinc-400 font-mono">{person.idFamilia || 'Sem Família'}</div>
+                      <div className="text-xxs text-zinc-400 font-mono">
+                        {/* Exibe idFamilia apenas se tiver formato válido (FAM-xxxxx) */}
+                        {person.idFamilia && /^FAM-/.test(person.idFamilia)
+                          ? person.idFamilia
+                          : <span className="italic text-zinc-300">Sem Família</span>
+                        }
+                      </div>
                     </td>
                     <td className="py-3 px-4 font-mono">{person.celularPrincipal || <span className="text-red-400 italic text-xxs">Sem fone</span>}</td>
                     <td className="py-3 px-4 text-right">

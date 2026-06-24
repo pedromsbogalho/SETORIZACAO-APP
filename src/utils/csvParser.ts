@@ -114,8 +114,9 @@ export function parseCSV(text: string): Partial<Person>[] {
     });
 
     // Helper to get row value using resilient name-matching
-    const getRowValue = (keys: string[]): string => {
-      // Step 1: Exact matches first
+    // exactOnly=true: só aceita match exato (sem substring) - usar para campos críticos como ID Família
+    const getRowValue = (keys: string[], exactOnly = false): string => {
+      // Step 1: Exact matches first (sempre)
       for (const targetKey of keys) {
         const cleanTarget = targetKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
         const matchedKey = Object.keys(row).find(k => {
@@ -125,14 +126,16 @@ export function parseCSV(text: string): Partial<Person>[] {
         if (matchedKey) return row[matchedKey];
       }
 
-      // Step 2: Substring matches
-      for (const targetKey of keys) {
-        const cleanTarget = targetKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const matchedKey = Object.keys(row).find(k => {
-          const cleanK = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
-          return cleanK.includes(cleanTarget) || cleanTarget.includes(cleanK);
-        });
-        if (matchedKey) return row[matchedKey];
+      // Step 2: Substring matches (apenas se não for exactOnly)
+      if (!exactOnly) {
+        for (const targetKey of keys) {
+          const cleanTarget = targetKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+          const matchedKey = Object.keys(row).find(k => {
+            const cleanK = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+            return cleanK.includes(cleanTarget) || cleanTarget.includes(cleanK);
+          });
+          if (matchedKey) return row[matchedKey];
+        }
       }
       return '';
     };
@@ -190,11 +193,12 @@ export function parseCSV(text: string): Partial<Person>[] {
     const idade = parseInt(getRowValue(['IDADE', 'AGE']) || '0') || 40;
     const nascimento = formatExcelDate(getRowValue(['NASCIMENTO', 'BIRTH', 'DATA NASCIMENTO']));
     
-    const celular = getRowValue(['CELULAR PRINCIPAL SMS', 'CELULAR PRINCIPAL', 'CELULAR', 'TELEFONE', 'MOBILE', 'PHONE']) || '';
+    // Celular: prioriza "Celular Principal SMS" (nome exato da coluna da planilha oficial)
+    const celular = getRowValue(['CELULAR PRINCIPAL SMS', 'CELULARPRINCIPALMS', 'CELULAR PRINCIPAL', 'CELULAR', 'TELEFONE', 'MOBILE', 'PHONE']) || '';
     const contato = getRowValue(['TELEFONE CONTATO', 'CONTATO', 'CONTACT']) || celular || '';
     const email = getRowValue(['EMAIL', 'E-MAIL']) || '';
     
-    const ultimoAcesso = getRowValue(['ÚLTIMO ACESSO APP', 'ULTIMO ACESSO APP', 'ACESSO APP', 'LAST ACCESS']) || '';
+    const ultimoAcesso = getRowValue(['ULTIMO ACESSO APP', 'ACESSO APP', 'LAST ACCESS']) || '';
     const endGoogle = getRowValue(['END GOOGLE', 'GOOGLE ADDRESS']).trim();
     const endCompleto = (getRowValue(['END COMPLETO', 'LOGRADOURO', 'ENDERECO', 'ADDRESS']) || endGoogle).trim();
     
@@ -205,7 +209,13 @@ export function parseCSV(text: string): Partial<Person>[] {
     const bairro = (getRowValue(['BAIRRO AJUSTADO', 'BAIRRO_AJUSTADO']) || getRowValue(['BAIRRO', 'NEIGHBORHOOD'])).trim();
     const tempoMembro = getRowValue(['TEMPO MEMBRO', 'TEMPO_MEMBRO', 'MEMBERSHIP_TIME']).trim();
     const anoOutorga = getRowValue(['ANO OUTORGA', 'ANO_OUTORGA', 'YEAR_OUTORGA']).trim();
-    const idFamilia = getRowValue(['ID FAMILIA', 'ID_FAMILIA', 'FAMILIA', 'FAMILY']).trim() || `FAM-${Math.floor(Math.random() * 900) + 100}`;
+
+    // ID Família: busca estrita — só aceita valor no formato FAM-XXXXX para evitar
+    // bater em colunas como "Assistente de Família" que geram lixo (ex: "0,SECRETARIA,OUTROS...")
+    const idFamiliaRaw = getRowValue(['ID FAMILIA', 'ID_FAMILIA', 'IDFAMILIA'], true).trim();
+    const idFamilia = (idFamiliaRaw && /^FAM-\d+$/i.test(idFamiliaRaw))
+      ? idFamiliaRaw.toUpperCase()
+      : `FAM-${code}`;
 
     // Deduce spiritual journey stage from values
     let jornada: JornadaEtapa = 'Primeiro atendimento';

@@ -83,10 +83,16 @@ export default function App() {
   const onboardingFileRef = useRef<HTMLInputElement>(null);
 
   // Helper to dynamically link family IDs based on identical household addresses (person with oldest age is head)
+  // Respeita o idFamilia original da planilha quando já preenchido
   const enrichPeopleWithFamilyIds = (pList: Person[]): Person[] => {
     const groups: Record<string, Person[]> = {};
     
+    // Só agrupa por endereço pessoas que NÃO têm idFamilia original válido
     pList.forEach(p => {
+      // Se já tem um idFamilia válido (ex: FAM-444 vindo da planilha), preserva
+      if (p.idFamilia && /^FAM-/.test(p.idFamilia)) {
+        return;
+      }
       const addr = (p.endCompleto || '').trim().toUpperCase();
       if (addr && addr !== 'N/A' && addr !== 'SEM ENDEREÇO' && addr.length >= 5) {
         if (!groups[addr]) {
@@ -109,20 +115,25 @@ export default function App() {
     };
     
     return pList.map(p => {
+      // Se já tem idFamilia válido, preserva
+      if (p.idFamilia && /^FAM-/.test(p.idFamilia)) {
+        return p;
+      }
       const addr = (p.endCompleto || '').trim().toUpperCase();
       if (addr && addr !== 'N/A' && addr !== 'SEM ENDEREÇO' && addr.length >= 5) {
         const list = groups[addr];
-        const oldest = getOldest(list);
-        return {
-          ...p,
-          idFamilia: `FAM-${oldest.id}`
-        };
-      } else {
-        return {
-          ...p,
-          idFamilia: `FAM-${p.id}`
-        };
+        if (list && list.length > 0) {
+          const oldest = getOldest(list);
+          return {
+            ...p,
+            idFamilia: `FAM-${oldest.id}`
+          };
+        }
       }
+      return {
+        ...p,
+        idFamilia: `FAM-${p.id}`
+      };
     });
   };
 
