@@ -8,11 +8,18 @@ import { Person, SubtipoCadastro, StatusAtual, JornadaEtapa } from '../types';
 export function parseCSV(text: string): Partial<Person>[] {
   if (!text) return [];
   
-  const lines = text.split(/\r?\n/);
+  // Remove BOM if present (essential for UTF-8 CSVs from Excel)
+  const cleanText = text.replace(/^\uFEFF/, '');
+  const lines = cleanText.split(/\r?\n/);
   if (lines.length < 2) return [];
 
   // Parse header
-  const headers = lines[0].split(/[;,]/).map(h => h.replace(/^["']|["']$/g, '').trim().toUpperCase());
+  const headers = lines[0].split(/[;,]/).map(h => 
+    h.replace(/^["']|["']$/g, '')
+     .replace(/[\s\xA0\u00A0]+/g, ' ')
+     .trim()
+     .toUpperCase()
+  );
   
   const parsedPeople: Partial<Person>[] = [];
 
@@ -45,30 +52,47 @@ export function parseCSV(text: string): Partial<Person>[] {
       row[header] = values[idx] || '';
     });
 
-    // Mapping fields
-    const code = row['CÓDIGO CADASTRO'] || row['CODIGO CADASTRO'] || row['CODIGO'] || String(1000000 + i);
-    const nome = row['NOME'] || '';
+    // Helper to get row value using resilient name-matching
+    const getRowValue = (keys: string[]): string => {
+      const matchedKey = Object.keys(row).find(k => {
+        // Normalize accents (e.g. Ó -> O) and remove non-alphanumeric characters
+        const cleanK = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return keys.some(targetKey => {
+          const cleanTarget = targetKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+          return cleanK === cleanTarget || cleanK.includes(cleanTarget) || cleanTarget.includes(cleanK);
+        });
+      });
+      return matchedKey ? row[matchedKey] : '';
+    };
+
+    // Mapping fields with robust extraction
+    const code = getRowValue(['CÓDIGO CADASTRO', 'CODIGO CADASTRO', 'CODIGO', 'CODE']) || String(1000000 + i);
+    const nome = getRowValue(['NOME', 'NAME']) || '';
     if (!nome) continue; // Skip empty rows
 
-    const subtipo = (row['SUBTIPO CADASTRO'] || '').toUpperCase() === 'MEMBRO' ? 'MEMBRO' : 'FREQUENTADOR';
-    const tipo = row['TIPO CADASTRO'] || (subtipo === 'MEMBRO' ? 'Ohikari' : 'Frequente');
-    const status = (row['STATUS ATUAL'] || 'ATIVO').toUpperCase() as StatusAtual;
-    const idade = parseInt(row['IDADE'] || '0') || 40;
-    const nascimento = row['NASCIMENTO'] || '1980-01-01';
-    const celular = row['CELULAR PRINCIPAL SMS'] || row['CELULAR'] || row['TELEFONE'] || '';
-    const contato = row['TELEFONE CONTATO'] || celular || '';
-    const email = row['EMAIL'] || '';
-    const ultimoAcesso = row['ÚLTIMO ACESSO APP'] || row['ULTIMO ACESSO APP'] || '';
-    const endCompleto = row['END COMPLETO'] || row['LOGRADOURO'] || '';
-    const am = row['AM'] || '';
-    const setor2 = row['SETOR2'] || row['SETOR'] || '';
-    const af2 = row['AF2'] || row['AF'] || '';
-    const endGoogle = row['END GOOGLE'] || '';
-    const bairro = row['BAIRRO AJUSTADO'] || row['BAIRRO'] || '';
-    const dataOutorga = row['DATA OUTORGA'] || '';
-    const tempoMembro = row['TEMPO MEMBRO'] || '';
-    const anoOutorga = row['ANO OUTORGA'] || '';
-    const idFamilia = row['ID FAMILIA'] || row['ID_FAMILIA'] || `FAM-${Math.floor(Math.random() * 900) + 100}`;
+    const subtipoRaw = getRowValue(['SUBTIPO CADASTRO', 'SUBTIPO_CADASTRO', 'SUBTIPO']).trim().toUpperCase();
+    const subtipo = (subtipoRaw === 'MEMBRO' || subtipoRaw.includes('MEMBRO')) ? 'MEMBRO' : 'FREQUENTADOR';
+    
+    const tipo = getRowValue(['TIPO CADASTRO', 'TIPO_CADASTRO', 'TIPO']) || (subtipo === 'MEMBRO' ? 'Ohikari' : 'Frequente');
+    const status = (getRowValue(['STATUS ATUAL', 'STATUS_ATUAL', 'STATUS']) || 'ATIVO').toUpperCase() as StatusAtual;
+    const idade = parseInt(getRowValue(['IDADE', 'AGE']) || '0') || 40;
+    const nascimento = getRowValue(['NASCIMENTO', 'BIRTH', 'DATA NASCIMENTO']) || '1980-01-01';
+    
+    const celular = getRowValue(['CELULAR PRINCIPAL SMS', 'CELULAR', 'TELEFONE', 'MOBILE', 'PHONE']) || '';
+    const contato = getRowValue(['TELEFONE CONTATO', 'CONTATO', 'CONTACT']) || celular || '';
+    const email = getRowValue(['EMAIL', 'E-MAIL']) || '';
+    
+    const ultimoAcesso = getRowValue(['ÚLTIMO ACESSO APP', 'ULTIMO ACESSO APP', 'ACESSO APP', 'LAST ACCESS']) || '';
+    const endCompleto = getRowValue(['END COMPLETO', 'LOGRADOURO', 'ENDERECO', 'ADDRESS']) || '';
+    const am = getRowValue(['AM', 'ASSISTENTE', 'MINISTRO']) || '';
+    const setor2 = getRowValue(['SETOR2', 'SETOR', 'SECTOR']) || '';
+    const af2 = getRowValue(['AF2', 'AF']) || '';
+    const endGoogle = getRowValue(['END GOOGLE', 'GOOGLE ADDRESS']) || '';
+    const bairro = getRowValue(['BAIRRO AJUSTADO', 'BAIRRO', 'NEIGHBORHOOD']) || '';
+    const dataOutorga = getRowValue(['DATA OUTORGA', 'OUTORGA', 'DATA_OUTORGA']) || '';
+    const tempoMembro = getRowValue(['TEMPO MEMBRO', 'TEMPO_MEMBRO', 'MEMBERSHIP_TIME']) || '';
+    const anoOutorga = getRowValue(['ANO OUTORGA', 'ANO_OUTORGA', 'YEAR_OUTORGA']) || '';
+    const idFamilia = getRowValue(['ID FAMILIA', 'ID_FAMILIA', 'FAMILIA', 'FAMILY']) || `FAM-${Math.floor(Math.random() * 900) + 100}`;
 
     // Deduce spiritual journey stage from values
     let jornada: JornadaEtapa = 'Primeiro atendimento';

@@ -17,6 +17,13 @@ import PendenciesView from './components/PendenciesView';
 import ReportsView from './components/ReportsView';
 import StructureView from './components/StructureView';
 import { parseCSV, generateSampleCSVString } from './utils/csvParser';
+import {
+  fetchPeopleFromFirebase,
+  savePeopleBatchToFirebase,
+  fetchStructureFromFirebase,
+  saveStructureToFirebase,
+  clearAllFirebaseData
+} from './utils/firebase';
 
 // Icons
 import { 
@@ -59,6 +66,9 @@ export default function App() {
   // Role Session state
   const [userRole, setUserRole] = useState<UserRole>('ADMIN');
   const [currentAMName, setCurrentAMName] = useState<string>('PROF DANI');
+
+  // Loading state for Firebase
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Core Data states
   const [people, setPeople] = useState<Person[]>([]);
@@ -116,28 +126,71 @@ export default function App() {
     });
   };
 
-  // Load from LocalStorage or leave empty if no database is set up
+  // Load from Firebase on application start
   useEffect(() => {
-    const cachedPeople = localStorage.getItem('jc_people');
     const cachedTheme = localStorage.getItem('jc_theme');
-    const cachedStructure = localStorage.getItem('jc_structure');
-
-    if (cachedPeople) {
-      setPeople(JSON.parse(cachedPeople));
-    } else {
-      // Empty by default per user request to remove demo mode automatically
-      setPeople([]);
-    }
-
     if (cachedTheme) {
       setIsDark(cachedTheme === 'dark');
     }
 
-    if (cachedStructure) {
-      setStructure(JSON.parse(cachedStructure));
-    } else {
-      setStructure(DEFAULT_STRUCTURE);
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const fbPeople = await fetchPeopleFromFirebase();
+        const fbStructure = await fetchStructureFromFirebase();
+        
+        if (fbPeople && fbPeople.length > 0) {
+          setPeople(fbPeople);
+          localStorage.setItem('jc_people', JSON.stringify(fbPeople));
+        } else {
+          // If Firebase is empty, check if we have LocalStorage cached data to migrate
+          const cachedPeople = localStorage.getItem('jc_people');
+          if (cachedPeople) {
+            const parsed = JSON.parse(cachedPeople);
+            if (parsed.length > 0) {
+              setPeople(parsed);
+              // Migrate to Firebase asynchronously to keep app ready
+              savePeopleBatchToFirebase(parsed).catch(err => console.error("Auto-migration of people failed:", err));
+            }
+          } else {
+            setPeople([]);
+          }
+        }
+
+        if (fbStructure) {
+          setStructure(fbStructure);
+          localStorage.setItem('jc_structure', JSON.stringify(fbStructure));
+        } else {
+          // If structure is not in Firebase, check LocalStorage
+          const cachedStructure = localStorage.getItem('jc_structure');
+          if (cachedStructure) {
+            const parsed = JSON.parse(cachedStructure);
+            setStructure(parsed);
+            saveStructureToFirebase(parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+          } else {
+            setStructure(DEFAULT_STRUCTURE);
+            saveStructureToFirebase(DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load database from Firebase, falling back to LocalStorage:", error);
+        // Fallback to LocalStorage
+        const cachedPeople = localStorage.getItem('jc_people');
+        const cachedStructure = localStorage.getItem('jc_structure');
+        if (cachedPeople) {
+          setPeople(JSON.parse(cachedPeople));
+        }
+        if (cachedStructure) {
+          setStructure(JSON.parse(cachedStructure));
+        } else {
+          setStructure(DEFAULT_STRUCTURE);
+        }
+      } finally {
+        setIsLoading(false);
+      }
     }
+
+    loadData();
   }, []);
 
   // Compute families dynamically whenever the people list changes
@@ -202,11 +255,16 @@ export default function App() {
     setFamilies(derived);
   }, [people]);
 
-  // Sync to LocalStorage
-  const handleUpdatePeople = (newPeople: Person[]) => {
+  // Sync to LocalStorage & Firebase
+  const handleUpdatePeople = async (newPeople: Person[]) => {
     const enriched = enrichPeopleWithFamilyIds(newPeople);
     setPeople(enriched);
     localStorage.setItem('jc_people', JSON.stringify(enriched));
+    try {
+      await savePeopleBatchToFirebase(enriched);
+    } catch (err) {
+      console.error("Error syncing updated people list to Firebase:", err);
+    }
   };
 
   const handleUpdateFamilies = (newFamilies: Family[]) => {
@@ -215,9 +273,14 @@ export default function App() {
     localStorage.setItem('jc_families', JSON.stringify(newFamilies));
   };
 
-  const handleUpdateStructure = (newStructure: JohreiCenterStructure) => {
+  const handleUpdateStructure = async (newStructure: JohreiCenterStructure) => {
     setStructure(newStructure);
     localStorage.setItem('jc_structure', JSON.stringify(newStructure));
+    try {
+      await saveStructureToFirebase(newStructure);
+    } catch (err) {
+      console.error("Error syncing updated structure to Firebase:", err);
+    }
   };
 
   const toggleTheme = () => {
@@ -227,15 +290,21 @@ export default function App() {
   };
 
   // Helper for quick load demo database
-  const handleLoadDemoData = () => {
+  const handleLoadDemoData = async () => {
     const enriched = enrichPeopleWithFamilyIds(INITIAL_PEOPLE);
     setPeople(enriched);
     localStorage.setItem('jc_people', JSON.stringify(enriched));
-    alert('Banco de dados de demonstração carregado com sucesso!');
+    try {
+      await savePeopleBatchToFirebase(enriched);
+      alert('Banco de dados de demonstração carregado e salvo no Firebase com sucesso!');
+    } catch (err) {
+      console.error("Error syncing demo data to Firebase:", err);
+      alert('Banco de dados de demonstração carregado localmente (erro ao sincronizar na nuvem).');
+    }
   };
 
   // Handle onboarding manual CSV import
-  const handleOnboardingImport = () => {
+  const handleOnboardingImport = async () => {
     try {
       if (!onboardingCSV.trim()) {
         setOnboardingError('Cole ou faça o upload de um arquivo CSV válido.');
@@ -251,7 +320,13 @@ export default function App() {
       localStorage.setItem('jc_people', JSON.stringify(enriched));
       setOnboardingError('');
       setOnboardingCSV('');
-      alert(`${enriched.length} registros cadastrados com sucesso!`);
+      try {
+        await savePeopleBatchToFirebase(enriched);
+        alert(`${enriched.length} registros cadastrados e salvos na nuvem com sucesso!`);
+      } catch (err) {
+        console.error("Error syncing imported CSV to Firebase:", err);
+        alert(`${enriched.length} registros cadastrados localmente (erro ao salvar na nuvem).`);
+      }
     } catch (e: any) {
       setOnboardingError(`Erro: ${e.message}`);
     }
@@ -275,7 +350,7 @@ export default function App() {
     if (file) {
       if (file.name.endsWith('.csv') || file.type === 'text/csv') {
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
           const text = evt.target?.result as string;
           setOnboardingCSV(text);
           // Auto import on drop to streamline experience
@@ -287,7 +362,13 @@ export default function App() {
               localStorage.setItem('jc_people', JSON.stringify(enriched));
               setOnboardingError('');
               setOnboardingCSV('');
-              alert(`${enriched.length} registros importados com sucesso via arrastar e soltar!`);
+              try {
+                await savePeopleBatchToFirebase(enriched);
+                alert(`${enriched.length} registros importados e salvos na nuvem com sucesso via arrastar e soltar!`);
+              } catch (err) {
+                console.error("Error syncing dropped CSV to Firebase:", err);
+                alert(`${enriched.length} registros importados localmente (erro ao sincronizar na nuvem).`);
+              }
             } else {
               setOnboardingError('Nenhum registro válido encontrado no CSV.');
             }
@@ -308,9 +389,30 @@ export default function App() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const text = evt.target?.result as string;
       setOnboardingCSV(text);
+      try {
+        const parsed = parseCSV(text);
+        if (parsed.length > 0) {
+          const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
+          setPeople(enriched);
+          localStorage.setItem('jc_people', JSON.stringify(enriched));
+          setOnboardingError('');
+          setOnboardingCSV('');
+          try {
+            await savePeopleBatchToFirebase(enriched);
+            alert(`${enriched.length} registros importados e salvos na nuvem com sucesso!`);
+          } catch (err) {
+            console.error("Error syncing uploaded CSV to Firebase:", err);
+            alert(`${enriched.length} registros salvos localmente (erro ao salvar na nuvem).`);
+          }
+        } else {
+          setOnboardingError('Nenhum registro válido encontrado no CSV.');
+        }
+      } catch (err: any) {
+        setOnboardingError(`Erro ao ler CSV: ${err.message}`);
+      }
     };
     reader.readAsText(file);
   };
@@ -319,13 +421,20 @@ export default function App() {
     setShowResetModal(true);
   };
 
-  const confirmResetDatabase = () => {
+  const confirmResetDatabase = async () => {
     setPeople([]);
     localStorage.removeItem('jc_people');
     setOnboardingCSV('');
     setOnboardingError('');
     setShowResetModal(false);
     setActiveTab('dashboard');
+    try {
+      await clearAllFirebaseData();
+      alert('Banco de dados excluído do Firebase e localmente com sucesso!');
+    } catch (err) {
+      console.error("Error clearing data from Firebase:", err);
+      alert('Banco de dados limpo localmente (falha ao limpar no Firebase).');
+    }
   };
 
   // Navigation config (with collapse responsive capabilities)
@@ -352,6 +461,19 @@ export default function App() {
   const noSectorCount = people.filter(p => !p.setor2).length;
   const noPhoneCount = people.filter(p => !p.celularPrincipal).length;
   const totalAlerts = missingPostOutorgaCount + noWhatsCount + familiesSemAFCount + noSectorCount + noPhoneCount;
+
+  // Loading screen during Firebase connection/retrieval
+  if (isLoading) {
+    return (
+      <div className={`min-h-screen font-sans flex items-center justify-center p-4 transition-colors duration-300 ${isDark ? 'bg-[#09090c] text-zinc-100' : 'bg-[#f4f5f7] text-slate-800'}`}>
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-semibold tracking-wide">Conectando ao Firebase...</p>
+          <p className="text-xs text-zinc-400 font-mono">Sincronizando base de dados do Johrei Center</p>
+        </div>
+      </div>
+    );
+  }
 
   // Onboarding screen layout if database is empty
   if (people.length === 0) {

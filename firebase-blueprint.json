@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Person": {
+      "title": "Person",
+      "description": "A member or frequenter of the Johrei Center",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "tipoCadastro": { "type": "string" },
+        "subtipoCadastro": { "type": "string" },
+        "statusAtual": { "type": "string" },
+        "nascimento": { "type": "string" },
+        "idade": { "type": "number" },
+        "celularPrincipal": { "type": "string" },
+        "telefoneContato": { "type": "string" },
+        "email": { "type": "string" },
+        "ultimoAcessoApp": { "type": "string" },
+        "endCompleto": { "type": "string" },
+        "am": { "type": "string" },
+        "setor2": { "type": "string" },
+        "af2": { "type": "string" },
+        "endGoogle": { "type": "string" },
+        "bairroAjustado": { "type": "string" },
+        "dataOutorga": { "type": "string" },
+        "tempoMembro": { "type": "string" },
+        "anoOutorga": { "type": "string" },
+        "idFamilia": { "type": "string" },
+        "jornadaEtapa": { "type": "string" }
+      },
+      "required": ["id", "nome", "subtipoCadastro"]
+    },
+    "Family": {
+      "title": "Family",
+      "description": "A registered household family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "endereco": { "type": "string" },
+        "afResponsavel": { "type": "string" },
+        "historico": { "type": "string" },
+        "observacoes": { "type": "string" }
+      },
+      "required": ["id", "nome"]
+    },
+    "Structure": {
+      "title": "Structure",
+      "description": "Johrei Center pastoral and assistant structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amList": { "type": "array" },
+        "afList": { "type": "array" },
+        "assessoresList": { "type": "array" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/people/{personId}": {
+      "schema": "Person",
+      "description": "Collection of all members and frequenters"
+    },
+    "/families/{familyId}": {
+      "schema": "Family",
+      "description": "Collection of all family records"
+    },
+    "/structures/{structureId}": {
+      "schema": "Structure",
+      "description": "Johrei Center pastoral and supporting staff structures"
+    }
+  }
+}
