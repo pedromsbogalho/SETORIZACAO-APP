@@ -27,15 +27,7 @@ const storageBucket = metaEnv.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.sto
 const messagingSenderId = metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId;
 const appId = metaEnv.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
 
-// Determine if we are running in production outside the AI Studio preview environment (e.g. Vercel)
-const isOutsideAIStudio = typeof window !== 'undefined' && 
-  window.location.hostname !== 'localhost' && 
-  window.location.hostname !== '127.0.0.1' &&
-  !window.location.hostname.includes('run.app');
-
-const firestoreDatabaseId = isOutsideAIStudio
-  ? '(default)'
-  : (metaEnv.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)');
+const firestoreDatabaseId = metaEnv.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)';
 
 // Initialize Firebase App
 const app = initializeApp({
