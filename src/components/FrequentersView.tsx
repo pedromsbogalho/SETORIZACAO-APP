@@ -422,6 +422,9 @@ export default function FrequentersView({
                   FALECIDO: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400',
                 };
 
+                const sectorAM = structure.amList.find(am => am.sector.toUpperCase() === (person.setor2 || '').toUpperCase());
+                const displayAM = sectorAM ? sectorAM.name : (person.am || '');
+
                 return (
                   <tr key={person.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-all">
                     <td className="py-3 px-4 font-mono font-medium text-zinc-400">{person.id}</td>
@@ -444,7 +447,7 @@ export default function FrequentersView({
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-semibold">{person.setor2 || <span className="text-red-400 italic">Sem Setor</span>}</div>
-                      <div className="text-xxs text-zinc-400">AM: {person.am || 'Sem AM'}</div>
+                      <div className="text-xxs text-zinc-400">AM: {displayAM || <span className="text-red-400/80 italic">Sem AM</span>}</div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-medium">{person.bairroAjustado || <span className="text-zinc-400">N/A</span>}</div>

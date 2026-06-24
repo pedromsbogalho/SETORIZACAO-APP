@@ -28,6 +28,8 @@ export default function PeopleView({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL'); // Filters Ohikari vs other types
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [sortField, setSortField] = useState<string>('nome');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -321,10 +323,77 @@ export default function PeopleView({
     document.body.removeChild(link);
   };
 
+  // Sorting and pagination logic
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+    setPageIndex(0);
+  };
+
+  const sortedPeople = React.useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+
+      switch (sortField) {
+        case 'id':
+          valA = a.id || '';
+          valB = b.id || '';
+          break;
+        case 'nome':
+          valA = a.nome || '';
+          valB = b.nome || '';
+          break;
+        case 'tipoCadastro':
+          valA = a.tipoCadastro || '';
+          valB = b.tipoCadastro || '';
+          break;
+        case 'setor2':
+          valA = a.setor2 || '';
+          valB = b.setor2 || '';
+          break;
+        case 'bairroAjustado':
+          valA = a.bairroAjustado || '';
+          valB = b.bairroAjustado || '';
+          break;
+        case 'celularPrincipal':
+          valA = a.celularPrincipal || '';
+          valB = b.celularPrincipal || '';
+          break;
+        case 'nascimento':
+          valA = a.nascimento || '';
+          valB = b.nascimento || '';
+          break;
+        case 'idade':
+          valA = Number(a.idade) || 0;
+          valB = Number(b.idade) || 0;
+          break;
+        default:
+          valA = a.nome || '';
+          valB = b.nome || '';
+      }
+
+      if (valA === valB) return 0;
+      if (valA === null || valA === undefined || valA === '') return 1;
+      if (valB === null || valB === undefined || valB === '') return -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+
+      const comparison = String(valA).localeCompare(String(valB), 'pt-BR', { numeric: true, sensitivity: 'base' });
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [filtered, sortField, sortOrder]);
+
   // Pagination slice
-  const totalRows = filtered.length;
+  const totalRows = sortedPeople.length;
   const pageCount = Math.ceil(totalRows / rowsLimit);
-  const displayedPeople = filtered.slice(pageIndex * rowsLimit, (pageIndex + 1) * rowsLimit);
+  const displayedPeople = sortedPeople.slice(pageIndex * rowsLimit, (pageIndex + 1) * rowsLimit);
 
   const handlePageChange = (newIndex: number) => {
     if (newIndex >= 0 && newIndex < pageCount) {
@@ -413,6 +482,32 @@ export default function PeopleView({
               </select>
             </div>
 
+            {/* Sorting selection */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Ordenar:</span>
+              <select 
+                value={`${sortField}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split('-');
+                  setSortField(field);
+                  setSortOrder(order as 'asc' | 'desc');
+                  setPageIndex(0);
+                }}
+                className={`text-xs py-1.5 px-2.5 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none`}
+              >
+                <option value="nome-asc">Nome (A-Z)</option>
+                <option value="nome-desc">Nome (Z-A)</option>
+                <option value="nascimento-asc">Nasc. (Mais Antigo)</option>
+                <option value="nascimento-desc">Nasc. (Mais Recente)</option>
+                <option value="idade-asc">Idade (Menor para Maior)</option>
+                <option value="idade-desc">Idade (Maior para Menor)</option>
+                <option value="id-asc">Código (Crescente)</option>
+                <option value="id-desc">Código (Decrescente)</option>
+                <option value="setor2-asc">Setor (A-Z)</option>
+                <option value="bairroAjustado-asc">Bairro (A-Z)</option>
+              </select>
+            </div>
+
             {/* Row limit selection */}
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Exibir:</span>
@@ -437,14 +532,55 @@ export default function PeopleView({
           <table className="w-full text-left border-collapse min-w-[850px]">
             <thead>
               <tr className={`text-[10px] font-mono uppercase tracking-wider ${isDark ? 'bg-zinc-950/40 text-zinc-400' : 'bg-slate-100/40 text-slate-500'} border-b border-slate-200/40 dark:border-white/5`}>
-                <th className="py-3.5 px-4 font-bold">Código</th>
-                <th className="py-3.5 px-4 font-bold">Nome Completo</th>
-                <th className="py-3.5 px-4 font-bold">Tipo</th>
-                <th className="py-3.5 px-4 font-bold">Acompanhamento</th>
-                <th className="py-3.5 px-4 font-bold">Setor / AM</th>
-                <th className="py-3.5 px-4 font-bold">Bairro / Família</th>
-                <th className="py-3.5 px-4 font-bold">Celular</th>
-                <th className="py-3.5 px-4 font-bold text-right">Ações</th>
+                <th 
+                  onClick={() => handleSort('id')} 
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    Código {sortField === 'id' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('nome')} 
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    Nome Completo {sortField === 'nome' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('tipoCadastro')} 
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    Tipo {sortField === 'tipoCadastro' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('setor2')} 
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    Setor / AM {sortField === 'setor2' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('bairroAjustado')} 
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    Bairro / Família {sortField === 'bairroAjustado' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('celularPrincipal')} 
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    Celular {sortField === 'celularPrincipal' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                </th>
+                <th className="py-3.5 px-4 font-bold text-right select-none">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs">
@@ -455,6 +591,9 @@ export default function PeopleView({
                   AFASTADO: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
                   FALECIDO: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400',
                 };
+
+                const sectorAM = structure.amList.find(am => am.sector.toUpperCase() === (person.setor2 || '').toUpperCase());
+                const displayAM = sectorAM ? sectorAM.name : (person.am || '');
 
                 return (
                   <tr key={person.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-all">
@@ -473,12 +612,8 @@ export default function PeopleView({
                       {person.tipoCadastro}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-medium text-zinc-800 dark:text-zinc-200">{person.jornadaEtapa}</div>
-                      <div className="text-[10px] text-zinc-400">Acesso: {person.ultimoAcessoApp || 'Sem registro'}</div>
-                    </td>
-                    <td className="py-3 px-4">
                       <div className="font-semibold">{person.setor2 || <span className="text-red-400 italic">Sem Setor</span>}</div>
-                      <div className="text-xxs text-zinc-400">AM: {person.am || 'Sem AM'}</div>
+                      <div className="text-xxs text-zinc-400">AM: {displayAM || <span className="text-red-400/80 italic">Sem AM</span>}</div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-medium">{person.bairroAjustado || <span className="text-zinc-400 font-mono">N/A</span>}</div>
@@ -506,7 +641,7 @@ export default function PeopleView({
               })}
               {displayedPeople.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-zinc-500 italic">
+                  <td colSpan={7} className="py-12 text-center text-zinc-500 italic">
                     Nenhum membro encontrado com estes critérios.
                   </td>
                 </tr>
