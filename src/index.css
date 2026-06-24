@@ -13,19 +13,20 @@ body {
 }
 
 .glass-panel {
-  /* Mais contraste e legibilidade em telas pequenas */
-  background-color: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(148, 163, 184, 0.55);
+  /* Contraste mais forte (evita cinza “lavado” no mobile) */
+  background-color: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(15, 23, 42, 0.22); /* slate-900  */
 }
 
 .dark .glass-panel {
-  background-color: rgba(9, 9, 11, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(9, 9, 11, 0.84);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
+
 
 
 .glass-sidebar {
@@ -72,11 +73,14 @@ body {
   background: rgba(13, 148, 136, 0.45);
 }
 
-/* Mobile table: remove horizontal scroll so rows fit viewport */
+/* Mobile table: preserve horizontal scroll (tables are wide) but improve feel */
 @media (max-width: 768px) {
   .custom-scrollbar {
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
   }
 }
+
 
 
