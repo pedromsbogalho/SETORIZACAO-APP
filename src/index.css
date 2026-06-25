@@ -192,20 +192,22 @@ body {
 }
 
 .glass-panel {
-  /* Contraste mais forte (evita cinza "lavado" no mobile) */
-  background-color: rgba(255, 255, 255, 0.86);
+  /* Contraste forte (evita texto “igual” ao fundo no iPhone/Safari) */
+  background-color: rgba(255, 255, 255, 0.93);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(15, 23, 42, 0.22);
-  /* slate-900  */
+  border: 1px solid rgba(2, 6, 23, 0.18);
+  color: #0f172a;
 }
 
 .dark .glass-panel {
-  background-color: rgba(9, 9, 11, 0.84);
+  background-color: rgba(2, 6, 23, 0.82);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
 }
+
 
 
 
