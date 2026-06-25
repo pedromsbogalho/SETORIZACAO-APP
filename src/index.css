@@ -9,6 +9,7 @@
  * Esta paleta reproduz fielmente a paleta clássica do Tailwind em HEX.
  */
 @theme {
+  --variant-dark: selector(.dark);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;

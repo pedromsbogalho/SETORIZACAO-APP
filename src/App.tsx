@@ -29,7 +29,8 @@ import {
 import { 
   Compass, Users, Landmark, Award, BookOpen, Home, AlertTriangle, FileText, 
   Sun, Moon, Shield, Sparkles, LogOut, CheckCircle, Search, HelpCircle, Heart,
-  Menu, X, ChevronLeft, ChevronRight, Upload, Database, Check
+  Menu, X, ChevronLeft, ChevronRight, Upload, Database, Check,
+  LayoutDashboard, GraduationCap, Building2, BarChart3, Network
 } from 'lucide-react';
 
 const DEFAULT_STRUCTURE: JohreiCenterStructure = {
@@ -472,16 +473,16 @@ export default function App() {
 
   // Navigation config (with collapse responsive capabilities)
   const menuItems = [
-    { id: 'dashboard', label: 'Painel Geral', icon: Landmark },
+    { id: 'dashboard', label: 'Painel Geral', icon: LayoutDashboard },
     { id: 'people', label: 'Membros', icon: Users },
     { id: 'frequenters', label: 'Frequentadores', icon: Heart },
-    { id: 'tree', label: 'Setorização', icon: Compass },
-    { id: 'journey', label: 'Jornada Espiritual', icon: Sparkles },
-    { id: 'courses', label: 'Controle de Cursos', icon: BookOpen },
+    { id: 'tree', label: 'Setorização', icon: Network },
+    { id: 'journey', label: 'Jornada Espiritual', icon: Compass },
+    { id: 'courses', label: 'Controle de Cursos', icon: GraduationCap },
     { id: 'families', label: 'Famílias', icon: Home },
-    { id: 'structure', label: 'Estrutura JC', icon: Award },
+    { id: 'structure', label: 'Estrutura JC', icon: Building2 },
     { id: 'pendencies', label: 'Pendências', icon: AlertTriangle, alertCount: true },
-    { id: 'reports', label: 'Relatórios', icon: FileText }
+    { id: 'reports', label: 'Relatórios', icon: BarChart3 }
   ];
 
   // Reinforce: theme fixa (isDark sempre false), remover import e componentes se não usados.
