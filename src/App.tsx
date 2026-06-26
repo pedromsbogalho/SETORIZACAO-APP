@@ -24,6 +24,8 @@ import {
   logoutUser,
   fetchPeopleFromFirebase,
   savePeopleBatchToFirebase,
+  savePersonToFirebase,
+  deletePersonFromFirebase,
   fetchStructureFromFirebase,
   saveStructureToFirebase,
   clearAllFirebaseData,
@@ -422,14 +424,53 @@ export default function App() {
     setFamilies(derived);
   }, [people]);
 
-  // Sync to LocalStorage & Firebase
+  // Sync to LocalStorage & Firebase (Differential/Granular Sync)
   const handleUpdatePeople = async (newPeople: Person[]) => {
     if (!currentUser) return;
     const enriched = enrichPeopleWithFamilyIds(newPeople);
+
+    // Identifica apenas os registros que foram alterados, adicionados ou deletados
+    const changedPeople: Person[] = [];
+    const deletedIds: string[] = [];
+
+    // Mapeia o estado atual em memória para busca rápida
+    const currentPeopleMap = new Map(people.map(p => [p.id, p]));
+
+    // Procura por novos registros ou modificações
+    enriched.forEach(p => {
+      const existing = currentPeopleMap.get(p.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(p)) {
+        changedPeople.push(p);
+      }
+    });
+
+    // Procura por deleções
+    const enrichedIds = new Set(enriched.map(p => p.id));
+    people.forEach(p => {
+      if (!enrichedIds.has(p.id)) {
+        deletedIds.push(p.id);
+      }
+    });
+
     setPeople(enriched);
     localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
+
+    // Executa atualizações incrementais em vez de regravar todos os 690+ membros
     try {
-      await savePeopleBatchToFirebase(currentUser.uid, enriched);
+      if (changedPeople.length > 0 || deletedIds.length > 0) {
+        console.log(`[Granular Sync] Sincronizando ${changedPeople.length} alterações/adições e ${deletedIds.length} exclusões no Firestore.`);
+        
+        // Se houver mais de 15 alterações, usa gravação em lote (ex: importação, carga demo ou edição em massa por IA)
+        if (changedPeople.length > 15) {
+          await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
+        } else {
+          // Grava cada modificação individualmente de forma paralela para economizar cota de escrita
+          await Promise.all([
+            ...changedPeople.map(p => savePersonToFirebase(currentUser.uid, p)),
+            ...deletedIds.map(id => deletePersonFromFirebase(currentUser.uid, id))
+          ]);
+        }
+      }
     } catch (err) {
       console.error("Error syncing updated people list to Firebase:", err);
     }
