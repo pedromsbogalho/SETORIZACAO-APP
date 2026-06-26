@@ -18,6 +18,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [memberTimeFilter, setMemberTimeFilter] = useState<'all' | 'recent' | '1-3' | '3plus' | 'none'>('all');
+  const [selectedPosOutorgaSectors, setSelectedPosOutorgaSectors] = useState<string[]>([]);
 
   // Extract unique sectors list
   const sectorsList = Array.from(new Set(people.map(p => p.setor2 || 'SEM SETOR').filter(Boolean)));
@@ -109,6 +110,29 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
     const matchesSector = selectedSector === 'ALL' || (p.setor2 || 'SEM SETOR') === selectedSector;
     return matchesSearch && matchesSector;
   });
+
+  const posOutorgaFiltered = useMemo(() => {
+    let list = filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari');
+
+    if (memberTimeFilter !== 'all') {
+      list = list.filter(p => {
+        const ano = p.anoOutorga ? Number(p.anoOutorga) : null;
+        if (!ano) return memberTimeFilter === 'none';
+        const currentYear = 2026;
+        const diff = currentYear - ano;
+        if (memberTimeFilter === 'recent') return diff <= 1;
+        if (memberTimeFilter === '1-3') return diff > 1 && diff <= 3;
+        if (memberTimeFilter === '3plus') return diff > 3;
+        return true;
+      });
+    }
+
+    if (selectedPosOutorgaSectors.length > 0) {
+      list = list.filter(p => selectedPosOutorgaSectors.includes(p.setor2 || 'SEM SETOR'));
+    }
+
+    return list;
+  }, [filteredPeople, memberTimeFilter, selectedPosOutorgaSectors]);
 
   return (
     <div className="space-y-6">
@@ -346,14 +370,54 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
 
           {/* Sectors Cards */}
           <div className="space-y-2">
-            <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Participantes por Setor</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Participantes por Setor (Clique para filtrar/combinar)</h4>
+              {selectedPosOutorgaSectors.length > 0 && (
+                <button
+                  onClick={() => setSelectedPosOutorgaSectors([])}
+                  className="text-[10px] text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 font-semibold cursor-pointer underline underline-offset-2"
+                >
+                  Limpar filtro de setores
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2.5">
-              {Object.entries(posOutorgaStats.sectors).map(([sectorName, count]) => (
-                <div key={sectorName} className="px-3 py-1.5 rounded-lg border border-teal-500/10 bg-teal-500/5 text-teal-700 dark:text-teal-400 text-[10px] font-bold uppercase flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
-                  {sectorName}: {count} {count === 1 ? 'membro' : 'membros'}
-                </div>
-              ))}
+              {Object.entries(posOutorgaStats.sectors).map(([sectorName, count]) => {
+                const isSelected = selectedPosOutorgaSectors.includes(sectorName);
+                const hasFiltersActive = selectedPosOutorgaSectors.length > 0;
+                
+                let cardClass = "";
+                if (isSelected) {
+                  cardClass = "bg-teal-600 border-teal-600 text-white shadow-xs font-bold scale-102";
+                } else if (hasFiltersActive) {
+                  cardClass = "border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/10 text-zinc-400 dark:text-zinc-500 opacity-50 hover:opacity-80";
+                } else {
+                  cardClass = "border-teal-500/10 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 hover:border-teal-500/20";
+                }
+
+                return (
+                  <button
+                    key={sectorName}
+                    onClick={() => {
+                      setSelectedPosOutorgaSectors(prev => {
+                        if (prev.includes(sectorName)) {
+                          return prev.filter(s => s !== sectorName);
+                        } else {
+                          return [...prev, sectorName];
+                        }
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border text-[10px] uppercase flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${cardClass}`}
+                  >
+                    {isSelected ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-white flex-shrink-0" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500 flex-shrink-0" />
+                    )}
+                    {sectorName}: {count} {count === 1 ? 'membro' : 'membros'}
+                  </button>
+                );
+              })}
               {Object.keys(posOutorgaStats.sectors).length === 0 && (
                 <div className="text-[10px] text-zinc-400 italic">Nenhum membro participando ativamente das aulas no momento.</div>
               )}
@@ -378,17 +442,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari').filter(p => {
-                  if (memberTimeFilter === 'all') return true;
-                  const ano = p.anoOutorga ? Number(p.anoOutorga) : null;
-                  if (!ano) return memberTimeFilter === 'none';
-                  const currentYear = 2026;
-                  const diff = currentYear - ano;
-                  if (memberTimeFilter === 'recent') return diff <= 1;
-                  if (memberTimeFilter === '1-3') return diff > 1 && diff <= 3;
-                  if (memberTimeFilter === '3plus') return diff > 3;
-                  return true;
-                }).map(p => {
+                {posOutorgaFiltered.map(p => {
                   const aulas = p.cursoPosOutorga.aulas;
                   const completedCount = Object.values(aulas).filter(v => v === 'Concluido' || v === 'Concluído').length;
                   const progressPercentage = completedCount * 20;
@@ -442,20 +496,10 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                     </tr>
                   );
                 })}
-                {filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari').filter(p => {
-                  if (memberTimeFilter === 'all') return true;
-                  const ano = p.anoOutorga ? Number(p.anoOutorga) : null;
-                  if (!ano) return memberTimeFilter === 'none';
-                  const currentYear = 2026;
-                  const diff = currentYear - ano;
-                  if (memberTimeFilter === 'recent') return diff <= 1;
-                  if (memberTimeFilter === '1-3') return diff > 1 && diff <= 3;
-                  if (memberTimeFilter === '3plus') return diff > 3;
-                  return true;
-                }).length === 0 && (
+                {posOutorgaFiltered.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-zinc-400 italic">
-                      Nenhum membro outorgado encontrado para acompanhar o curso pós-outorga.
+                      Nenhum membro outorgado encontrado para acompanhar o curso pós-outorga com os filtros aplicados.
                     </td>
                   </tr>
                 )}
