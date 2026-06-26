@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { JohreiCenterStructure, AMMember, AFMember, AssessorMember, Person } from '../types';
-import { Shield, Plus, Trash2, UserCheck, Heart, Users, MapPin, Award, Sparkles, Search } from 'lucide-react';
+import { Shield, Plus, Trash2, UserCheck, Heart, Users, MapPin, Award, Sparkles, Search, Home, GraduationCap, CheckCircle, AlertTriangle } from 'lucide-react';
 
 interface StructureViewProps {
   structure: JohreiCenterStructure;
@@ -17,6 +17,42 @@ interface StructureViewProps {
 export default function StructureView({ structure, onUpdateStructure, people, isDark }: StructureViewProps) {
   // Tabs for subcategories of structure
   const [activeSubTab, setActiveSubTab] = useState<'am' | 'af' | 'assessores'>('am');
+
+  // Helper to compute stats for a given sector
+  const getSectorStats = (sectorName: string) => {
+    const targetSector = sectorName.trim().toUpperCase();
+    const sectorPeople = people.filter(p => p.setor2?.trim().toUpperCase() === targetSector);
+    
+    const totalPeople = sectorPeople.length;
+    const totalMembers = sectorPeople.filter(p => p.subtipoCadastro === 'MEMBRO').length;
+    const totalFrequenters = sectorPeople.filter(p => p.subtipoCadastro === 'FREQUENTADOR').length;
+    
+    const uniqueFamilies = new Set(
+      sectorPeople
+        .map(p => p.idFamilia)
+        .filter(id => id && id !== 'SEM FAMÍLIA')
+    ).size;
+
+    const inPostOutorga = sectorPeople.filter(p => {
+      const isMembroOrOhikari = p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari';
+      if (!isMembroOrOhikari) return false;
+      const aulas = p.cursoPosOutorga?.aulas || {};
+      return !Object.values(aulas).every(v => v === 'Concluido' || v === 'Concluído');
+    }).length;
+
+    const active = sectorPeople.filter(p => p.statusAtual === 'ATIVO').length;
+    const inactiveOrAway = sectorPeople.filter(p => p.statusAtual === 'AFASTADO' || p.statusAtual === 'INATIVO').length;
+
+    return {
+      totalPeople,
+      totalMembers,
+      totalFrequenters,
+      uniqueFamilies,
+      inPostOutorga,
+      active,
+      inactiveOrAway
+    };
+  };
 
   // Input states
   const [amName, setAmName] = useState('');
@@ -671,86 +707,226 @@ export default function StructureView({ structure, onUpdateStructure, people, is
             {activeSubTab === 'assessores' && `Assessores / Apoios Ativos (${structure.assessoresList.length})`}
           </h3>
 
-          <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+          <div className="max-h-[600px] overflow-y-auto pr-1">
             {activeSubTab === 'am' && (
-              structure.amList.map(am => (
-                <div
-                  key={am.id}
-                  className={`p-3 rounded-lg flex justify-between items-center text-xs border ${
-                    isDark ? 'bg-zinc-950/20 border-zinc-850' : 'bg-white border-slate-200/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="p-2 bg-teal-500/10 text-teal-600 rounded-lg">
-                      <Award className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <p className="font-bold text-slate-800 dark:text-zinc-200 uppercase">{am.name}</p>
-                      <p className="text-[10px] text-zinc-400 font-mono">Setor: {am.sector}</p>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {structure.amList.map(am => {
+                  const stats = getSectorStats(am.sector);
+                  return (
+                    <div
+                      key={am.id}
+                      id={`card-am-${am.id}`}
+                      className="p-4 rounded-xl border border-slate-200/60 dark:border-white/5 bg-white dark:bg-zinc-950/20 shadow-xs space-y-3 hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      {/* Card Header */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="p-2 bg-teal-500/10 text-teal-600 rounded-xl flex-shrink-0">
+                            <Award className="w-5 h-5" />
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="font-sans font-bold text-xs sm:text-sm text-slate-800 dark:text-zinc-200 uppercase tracking-tight truncate" title={am.name}>{am.name}</h4>
+                            <span className="inline-block mt-0.5 px-2 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-teal-50 text-teal-700 border border-teal-100/30 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/40 truncate max-w-full">
+                              Setor: {am.sector}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          id={`btn-delete-am-${am.id}`}
+                          onClick={() => handleDeleteAM(am.id)}
+                          title="Remover da estrutura"
+                          className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-2 gap-2 pt-1.5">
+                        {/* Famílias */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <Home className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Famílias</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.uniqueFamilies}</span>
+                          </div>
+                        </div>
+
+                        {/* Membros */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <UserCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Membros</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.totalMembers}</span>
+                          </div>
+                        </div>
+
+                        {/* Frequentadores */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <Heart className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Freq. Acomp.</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.totalFrequenters}</span>
+                          </div>
+                        </div>
+
+                        {/* Pós Outorga */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <GraduationCap className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Pós-Outorga</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.inPostOutorga}</span>
+                          </div>
+                        </div>
+
+                        {/* Ativos */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Ativos</span>
+                            <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5 block leading-none">{stats.active}</span>
+                          </div>
+                        </div>
+
+                        {/* Afastados */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Afastados</span>
+                            <span className="text-xs font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5 block leading-none">{stats.inactiveOrAway}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteAM(am.id)}
-                    className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))
+                  );
+                })}
+              </div>
             )}
 
             {activeSubTab === 'af' && (
-              structure.afList.map(af => (
-                <div
-                  key={af.id}
-                  className={`p-3 rounded-lg flex justify-between items-center text-xs border ${
-                    isDark ? 'bg-zinc-950/20 border-zinc-850' : 'bg-white border-slate-200/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="p-2 bg-pink-500/10 text-pink-500 rounded-lg">
-                      <Heart className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <p className="font-bold text-slate-800 dark:text-zinc-200 uppercase">{af.name}</p>
-                      <p className="text-[10px] text-zinc-400 font-mono">Setor de Atuação: {af.sector}</p>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {structure.afList.map(af => {
+                  const stats = getSectorStats(af.sector);
+                  return (
+                    <div
+                      key={af.id}
+                      id={`card-af-${af.id}`}
+                      className="p-4 rounded-xl border border-slate-200/60 dark:border-white/5 bg-white dark:bg-zinc-950/20 shadow-xs space-y-3 hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      {/* Card Header */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="p-2 bg-pink-500/10 text-pink-500 rounded-xl flex-shrink-0">
+                            <Heart className="w-5 h-5" />
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="font-sans font-bold text-xs sm:text-sm text-slate-800 dark:text-zinc-200 uppercase tracking-tight truncate" title={af.name}>{af.name}</h4>
+                            <span className="inline-block mt-0.5 px-2 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-pink-50 text-pink-700 border border-pink-100/30 dark:bg-pink-950/20 dark:text-pink-400 dark:border-pink-900/40 truncate max-w-full">
+                              Setor: {af.sector}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          id={`btn-delete-af-${af.id}`}
+                          onClick={() => handleDeleteAF(af.id)}
+                          title="Remover da estrutura"
+                          className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-2 gap-2 pt-1.5">
+                        {/* Famílias */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <Home className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Famílias</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.uniqueFamilies}</span>
+                          </div>
+                        </div>
+
+                        {/* Membros */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <UserCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Membros</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.totalMembers}</span>
+                          </div>
+                        </div>
+
+                        {/* Frequentadores */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <Heart className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Freq. Acomp.</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.totalFrequenters}</span>
+                          </div>
+                        </div>
+
+                        {/* Pós Outorga */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <GraduationCap className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Pós-Outorga</span>
+                            <span className="text-xs font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5 block leading-none">{stats.inPostOutorga}</span>
+                          </div>
+                        </div>
+
+                        {/* Ativos */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Ativos</span>
+                            <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5 block leading-none">{stats.active}</span>
+                          </div>
+                        </div>
+
+                        {/* Afastados */}
+                        <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/10 rounded-lg border border-slate-100/50 dark:border-white/5 flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="block text-[8px] sm:text-[9px] text-zinc-400 font-semibold uppercase leading-none truncate">Afastados</span>
+                            <span className="text-xs font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5 block leading-none">{stats.inactiveOrAway}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteAF(af.id)}
-                    className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))
+                  );
+                })}
+              </div>
             )}
 
             {activeSubTab === 'assessores' && (
-              structure.assessoresList.map(ass => (
-                <div
-                  key={ass.id}
-                  className={`p-3 rounded-lg flex justify-between items-center text-xs border ${
-                    isDark ? 'bg-zinc-950/20 border-zinc-850' : 'bg-white border-slate-200/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                      <Shield className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <p className="font-bold text-slate-800 dark:text-zinc-200 uppercase">{ass.name}</p>
-                      <p className="text-[10px] text-zinc-400 font-mono">Função: {ass.role}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteAssessor(ass.id)}
-                    className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+              <div className="space-y-2">
+                {structure.assessoresList.map(ass => (
+                  <div
+                    key={ass.id}
+                    id={`card-assessor-${ass.id}`}
+                    className={`p-3 rounded-lg flex justify-between items-center text-xs border ${
+                      isDark ? 'bg-zinc-950/20 border-zinc-850' : 'bg-white border-slate-200/60'
+                    }`}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))
+                    <div className="flex items-center gap-2.5">
+                      <span className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                        <Shield className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <p className="font-bold text-slate-800 dark:text-zinc-200 uppercase">{ass.name}</p>
+                        <p className="text-[10px] text-zinc-400 font-mono">Função: {ass.role}</p>
+                      </div>
+                    </div>
+                    <button
+                      id={`btn-delete-assessor-${ass.id}`}
+                      onClick={() => handleDeleteAssessor(ass.id)}
+                      className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
 
             {((activeSubTab === 'am' && structure.amList.length === 0) ||
