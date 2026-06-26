@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Person, Family } from '../types';
-import { Home, Plus, MapPin, Users, Heart, Award } from 'lucide-react';
+import { Home, Plus, MapPin, Users, Heart, Award, Search, ArrowUpDown } from 'lucide-react';
 import FamilyGoogleMap from './FamilyGoogleMap';
 
 interface FamiliesViewProps {
@@ -27,7 +27,77 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
   const [newFamHist, setNewFamHist] = useState('');
   const [newFamObs, setNewFamObs] = useState('');
 
-  const selectedFamily = families.find(f => f.id === selectedFamilyId) || families[0];
+  // Filters State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSector, setSelectedSector] = useState('Todos');
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState('Todos');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Find all unique sectors and neighborhoods for families
+  const familySectorsMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    families.forEach(f => {
+      const familyMembers = people.filter(p => p.idFamilia === f.id);
+      const sectors = Array.from(new Set(familyMembers.map(m => m.setor2).filter(Boolean)));
+      map[f.id] = sectors.length > 0 ? sectors : ['Sem Setor'];
+    });
+    return map;
+  }, [families, people]);
+
+  const familyNeighborhoodsMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    families.forEach(f => {
+      const familyMembers = people.filter(p => p.idFamilia === f.id);
+      const neighborhoods = Array.from(new Set(familyMembers.map(m => m.bairroAjustado).filter(Boolean)));
+      map[f.id] = neighborhoods.length > 0 ? neighborhoods : ['Sem Bairro'];
+    });
+    return map;
+  }, [families, people]);
+
+  // List of all unique sectors for the clickable filter
+  const allSectors = useMemo(() => {
+    const sectorsSet = new Set<string>();
+    (Object.values(familySectorsMap) as string[][]).forEach(secs => secs.forEach(s => sectorsSet.add(s)));
+    return Array.from(sectorsSet).sort();
+  }, [familySectorsMap]);
+
+  // List of all unique neighborhoods (sorted A-Z) for the dropdown filter
+  const allNeighborhoods = useMemo(() => {
+    const neighborhoodsSet = new Set<string>();
+    (Object.values(familyNeighborhoodsMap) as string[][]).forEach(neighs => neighs.forEach(n => neighborhoodsSet.add(n)));
+    return Array.from(neighborhoodsSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [familyNeighborhoodsMap]);
+
+  // Filter and sort families
+  const filteredAndSortedFamilies = useMemo(() => {
+    return families
+      .filter(f => {
+        // Text search: matches family name, ID, or address
+        const term = searchTerm.toLowerCase();
+        const matchesSearch = 
+          f.nome.toLowerCase().includes(term) || 
+          f.id.toLowerCase().includes(term) || 
+          f.endereco.toLowerCase().includes(term);
+
+        // Sector filter
+        const matchesSector = 
+          selectedSector === 'Todos' || 
+          (familySectorsMap[f.id] || []).includes(selectedSector);
+
+        // Neighborhood filter
+        const matchesNeighborhood = 
+          selectedNeighborhood === 'Todos' || 
+          (familyNeighborhoodsMap[f.id] || []).includes(selectedNeighborhood);
+
+        return matchesSearch && matchesSector && matchesNeighborhood;
+      })
+      .sort((a, b) => {
+        const comparison = a.nome.localeCompare(b.nome, 'pt-BR');
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+  }, [families, searchTerm, selectedSector, selectedNeighborhood, sortOrder, familySectorsMap, familyNeighborhoodsMap]);
+
+  const selectedFamily = filteredAndSortedFamilies.find(f => f.id === selectedFamilyId) || filteredAndSortedFamilies[0];
 
   // Dynamic calculations for selected family
   const famPeople = people.filter(p => p.idFamilia === selectedFamily?.id);
@@ -89,14 +159,118 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left column: Family List */}
-        <div className="p-4 rounded-xl glass-panel shadow-sm space-y-4">
-          <span className="block text-[10px] font-mono uppercase text-zinc-400 tracking-wider">Diretório de Famílias ({families.length})</span>
-          <div className="space-y-2 max-h-120 overflow-y-auto pr-1">
-            {families.map(f => {
+        {/* Left column: Family List with Filters */}
+        <div className="p-4 rounded-xl glass-panel shadow-sm flex flex-col space-y-4 min-h-[450px]">
+          <div className="flex justify-between items-center">
+            <span className="block text-[10px] font-mono uppercase text-zinc-400 tracking-wider">
+              Diretório ({filteredAndSortedFamilies.length} de {families.length})
+            </span>
+            <button
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className={`p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-850 text-xs font-bold flex items-center gap-1 cursor-pointer select-none transition-all ${
+                isDark ? 'text-zinc-400 hover:text-white bg-zinc-950/20' : 'text-slate-500 hover:text-slate-800 bg-slate-50'
+              }`}
+              title="Ordenar de A a Z"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span className="text-[10px] font-mono uppercase">Ordem: {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}</span>
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nome, id, endereço..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={`w-full pl-9 pr-3 py-2 text-xs rounded-lg border focus:outline-none transition-all ${
+                isDark 
+                  ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200 focus:border-teal-500/50' 
+                  : 'bg-white border-slate-200 text-slate-700 focus:border-teal-500/50'
+              }`}
+            />
+          </div>
+
+          {/* Clickable Sectors (Setores) Filter */}
+          <div className="space-y-1.5">
+            <span className="block text-[9px] font-bold font-mono uppercase text-zinc-400 tracking-wider">
+              Filtrar por Setor (Clicável)
+            </span>
+            <div className="flex flex-wrap gap-1">
+              <button
+                onClick={() => setSelectedSector('Todos')}
+                className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase ${
+                  selectedSector === 'Todos'
+                    ? 'bg-teal-600 text-white'
+                    : isDark
+                      ? 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                }`}
+              >
+                Todos
+              </button>
+              {allSectors.map(sec => (
+                <button
+                  key={sec}
+                  onClick={() => setSelectedSector(sec)}
+                  className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase ${
+                    selectedSector === sec
+                      ? 'bg-teal-600 text-white'
+                      : isDark
+                        ? 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {sec}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Alphabetical Neighborhood (Bairro) Filter (Lista A-Z em Dropdown) */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <span className="block text-[9px] font-bold font-mono uppercase text-zinc-400 tracking-wider">
+                Bairro (A-Z)
+              </span>
+              {selectedNeighborhood !== 'Todos' && (
+                <button
+                  onClick={() => setSelectedNeighborhood('Todos')}
+                  className="text-[9px] font-bold text-teal-600 dark:text-teal-400 hover:underline"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+            <select
+              value={selectedNeighborhood}
+              onChange={(e) => setSelectedNeighborhood(e.target.value)}
+              className={`w-full p-2 text-xs rounded-lg border focus:outline-none transition-all uppercase font-semibold cursor-pointer ${
+                isDark 
+                  ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200 focus:border-teal-500/50' 
+                  : 'bg-white border-slate-200 text-slate-700 focus:border-teal-500/50'
+              }`}
+            >
+              <option value="Todos">TODOS OS BAIRROS ({allNeighborhoods.length})</option>
+              {allNeighborhoods.map(neigh => (
+                <option key={neigh} value={neigh}>
+                  {neigh}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Scrollable list of families */}
+          <div className="space-y-2 flex-1 max-h-120 overflow-y-auto pr-1">
+            {filteredAndSortedFamilies.map(f => {
               const active = f.id === selectedFamilyId;
               const fPeople = people.filter(p => p.idFamilia === f.id);
               const totalPeople = fPeople.length;
+              const familySectors = familySectorsMap[f.id] || [];
+              const familyNeighborhoods = familyNeighborhoodsMap[f.id] || [];
+
               return (
                 <div 
                   key={f.id}
@@ -107,19 +281,37 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
                       : `${isDark ? 'border-zinc-800 bg-zinc-950/10 hover:bg-zinc-800/40 text-zinc-300' : 'border-slate-200/40 bg-white/40 hover:bg-slate-100/50 text-slate-700'}`
                   }`}
                 >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-xs uppercase flex items-center gap-1.5">
-                      <Home className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-xs uppercase flex items-center gap-1.5 truncate">
+                      <Home className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
                       {f.nome}
                     </p>
                     <span className="text-[10px] text-zinc-400 block truncate mt-0.5">{f.endereco}</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {familySectors.map(sec => (
+                        <span key={sec} className="px-1 py-0.2 bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[8px] font-bold rounded uppercase">
+                          {sec}
+                        </span>
+                      ))}
+                      {familyNeighborhoods.map(neigh => (
+                        <span key={neigh} className="px-1 py-0.2 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[8px] font-bold rounded uppercase">
+                          {neigh}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <span className="px-2 py-0.5 bg-slate-200/60 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400 font-mono text-[10px] rounded-sm flex-shrink-0 ml-2 font-bold">
-                    {totalPeople} pessoas
+                  <span className="px-2 py-0.5 bg-slate-200/60 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400 font-mono text-[10px] rounded-sm flex-shrink-0 ml-2 font-bold self-start">
+                    {totalPeople} {totalPeople === 1 ? 'pessoa' : 'pessoas'}
                   </span>
                 </div>
               );
             })}
+
+            {filteredAndSortedFamilies.length === 0 && (
+              <div className="py-12 text-center text-zinc-400 italic text-xs">
+                Nenhuma família encontrada com os filtros selecionados.
+              </div>
+            )}
           </div>
         </div>
 
