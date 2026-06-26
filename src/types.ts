@@ -41,6 +41,37 @@ export interface GrupoWhatsApp {
   grupoLar: boolean;   // Entrou no grupo do lar?
 }
 
+export interface CursosNivelIgreja {
+  nivel1: 'Não iniciado' | 'Em andamento' | 'Concluído';
+  nivel2: 'Não iniciado' | 'Em andamento' | 'Concluído';
+  nivel3: 'Não iniciado' | 'Em andamento' | 'Concluído';
+  nivel4: 'Não iniciado' | 'Em andamento' | 'Concluído';
+}
+
+export interface PurificacoesMembro {
+  saude: boolean;
+  conflito: boolean;
+  financeiro: boolean;
+  outros: boolean;
+  descricao?: string;
+}
+
+export interface OrientaesMembro {
+  texto: string;
+  cumprindo: 'Sim' | 'Parcialmente' | 'Não' | 'Não se aplica';
+}
+
+export interface JornadaMembro {
+  donativo: 'Mensal' | 'Ocasional' | 'Raro' | 'Não pratica';
+  johreiFrequencia: 'Diário' | 'Semanal' | 'Mensal' | 'Ocasional' | 'Não pratica';
+  encaminhadosQuantidade: number;
+  ikebanaStatus: 'Não fez curso' | 'Fez curso básico' | 'Fez curso intermediário' | 'Fez curso avançado' | 'Ministra/Instrutor';
+  cursosNivel: CursosNivelIgreja;
+  jovem3Participacao: 'Sim' | 'Não' | 'Em andamento' | 'Não se aplica';
+  purificacoes: PurificacoesMembro;
+  orientacoes: OrientaesMembro;
+}
+
 export interface Person {
   id: string; // Código Cadastro
   nome: string;
@@ -74,6 +105,9 @@ export interface Person {
   
   // Grupos WhatsApp
   gruposWhats: GrupoWhatsApp;
+  
+  // Jornada específica de Membro (dedicações contínuas, cursos de nível, ikebana, purificações, etc)
+  jornadaMembro?: JornadaMembro;
 }
 
 export interface Family {
