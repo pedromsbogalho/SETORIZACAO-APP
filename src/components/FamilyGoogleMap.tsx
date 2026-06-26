@@ -297,55 +297,96 @@ export default function FamilyGoogleMap({ address, familyName, isDark }: FamilyG
         </div>
       </div>
 
-      {/* Actual Live Google Map Container */}
-      <div 
-        className={`transition-all duration-300 relative border overflow-hidden rounded-xl bg-slate-150 dark:bg-zinc-900 ${
-          isDark ? 'border-zinc-800' : 'border-slate-200'
-        } ${
-          isFullscreen 
-            ? 'fixed inset-4 z-50 shadow-2xl bg-white dark:bg-zinc-950 flex flex-col p-4 space-y-3' 
-            : 'h-48 shadow-xs'
-        }`}
-      >
-        {isFullscreen && (
-          <div className="flex justify-between items-center border-b border-slate-200/50 dark:border-zinc-800/80 pb-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 uppercase tracking-wide">
-                <MapPin className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                Mapa de Localização — {familyName}
-              </h3>
-              <p className="text-[10px] text-zinc-400 truncate max-w-lg mt-0.5">Endereço: {address}</p>
-            </div>
-            <button
-              onClick={() => setIsFullscreen(false)}
-              className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 rounded-lg text-xxs font-bold uppercase tracking-wider transition-all"
-            >
-              Fechar
-            </button>
-          </div>
-        )}
-
-        <div className="flex-1 min-h-0 w-full relative h-full">
-          <APIProvider apiKey={API_KEY} version="weekly">
-            <Map
-              defaultCenter={DEFAULT_CENTER}
-              defaultZoom={15}
-              mapId={isDark ? "4f6ef1e4695015b6" : "DEMO_MAP_ID"} // Demo dark/light ids
-              gestureHandling={'cooperative'}
-              disableDefaultUI={false}
-              zoomControl={true}
-              mapTypeControl={false}
-              streetViewControl={true}
-              fullscreenControl={false}
-              styles={isDark ? DARK_MAP_STYLE : undefined}
-              internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-              style={{ width: '100%', height: '100%' }}
-            >
-              <MapContent address={address} familyName={familyName} />
-            </Map>
-          </APIProvider>
+      {/* Map flow view or simple placeholder if in fullscreen */}
+      {isFullscreen ? (
+        <div className={`h-48 border rounded-xl flex flex-col items-center justify-center bg-slate-100/30 dark:bg-zinc-900/30 border-dashed ${isDark ? 'border-zinc-800' : 'border-slate-200'}`}>
+          <MapPin className="w-5 h-5 text-teal-600/60 dark:text-teal-400/60 animate-pulse mb-1" />
+          <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider">Mapa expandido em tela cheia</span>
+          <button 
+            onClick={() => setIsFullscreen(false)}
+            className="mt-2 px-2.5 py-1 text-[9px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer uppercase"
+          >
+            Minimizar / Restaurar
+          </button>
         </div>
-      </div>
+      ) : (
+        /* Actual Live Google Map Container in regular page flow */
+        <div 
+          className={`h-48 relative border overflow-hidden rounded-xl bg-slate-150 dark:bg-zinc-900 shadow-xs ${
+            isDark ? 'border-zinc-800' : 'border-slate-200'
+          }`}
+        >
+          <div className="w-full h-full relative">
+            <APIProvider apiKey={API_KEY} version="weekly">
+              <Map
+                defaultCenter={DEFAULT_CENTER}
+                defaultZoom={15}
+                mapId={isDark ? "4f6ef1e4695015b6" : "DEMO_MAP_ID"} // Demo dark/light ids
+                gestureHandling={'cooperative'}
+                disableDefaultUI={false}
+                zoomControl={true}
+                mapTypeControl={false}
+                streetViewControl={true}
+                fullscreenControl={false}
+                styles={isDark ? DARK_MAP_STYLE : undefined}
+                internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <MapContent address={address} familyName={familyName} />
+              </Map>
+            </APIProvider>
+          </div>
+        </div>
+      )}
+
+      {/* Render the Fullscreen version directly to document.body via Portal */}
+      {isFullscreen && typeof document !== 'undefined' && require('react-dom').createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 md:p-10 animate-fade-in">
+          <div className={`w-full h-full max-w-6xl bg-white dark:bg-zinc-950 rounded-2xl shadow-2xl border flex flex-col p-4 md:p-6 space-y-4 ${
+            isDark ? 'border-zinc-800' : 'border-slate-200'
+          }`}>
+            {/* Header inside Fullscreen Portal */}
+            <div className="flex justify-between items-start border-b border-slate-200/50 dark:border-zinc-800/80 pb-3">
+              <div>
+                <h3 className="text-sm md:text-base font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 uppercase tracking-wide">
+                  <MapPin className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
+                  Mapa de Localização — {familyName}
+                </h3>
+                <p className="text-[10px] text-zinc-400 mt-0.5 select-all">Endereço: {address}</p>
+              </div>
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="px-3.5 py-1.5 bg-zinc-150 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border border-slate-300/30 dark:border-white/5 shadow-xs"
+              >
+                Fechar / Restaurar
+              </button>
+            </div>
+
+            {/* Actual Map Area inside Fullscreen Portal */}
+            <div className="flex-1 min-h-0 w-full relative h-full rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800/80">
+              <APIProvider apiKey={API_KEY} version="weekly">
+                <Map
+                  defaultCenter={DEFAULT_CENTER}
+                  defaultZoom={15}
+                  mapId={isDark ? "4f6ef1e4695015b6" : "DEMO_MAP_ID"}
+                  gestureHandling={'cooperative'}
+                  disableDefaultUI={false}
+                  zoomControl={true}
+                  mapTypeControl={true}
+                  streetViewControl={true}
+                  fullscreenControl={false}
+                  styles={isDark ? DARK_MAP_STYLE : undefined}
+                  internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  <MapContent address={address} familyName={familyName} />
+                </Map>
+              </APIProvider>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
