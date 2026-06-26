@@ -133,11 +133,20 @@ export interface Visit {
   fotoUrl?: string;
 }
 
-export type UserRole = 'ADMIN' | 'AM';
+export type UserRole = 'ADMIN' | 'AM' | 'ASSISTANT';
+
+export interface AppUser {
+  uid: string;
+  email: string;
+  displayName?: string;
+  role: UserRole;
+  approved: boolean;
+  requestDate: string;
+}
 
 export interface UserSession {
   name: string;
-  role: UserRole;
+  role: 'ADMIN' | 'AM';
   amName?: string; // Se for AM, qual o nome do AM associado para filtrar os dados (ex: "PROF DANI")
 }
 

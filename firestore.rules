@@ -7,17 +7,48 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Collections owned by the authenticated user
-    match /users/{userId}/people/{personId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    match /users/{userId}/families/{familyId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    match /users/{userId}/structures/{structureId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function isApproved() {
+      return isSignedIn() && (
+        getUserData().approved == true || 
+        request.auth.token.email == 'pedro.ms.bogalho@gmail.com'
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        getUserData().role == 'ADMIN' || 
+        request.auth.token.email == 'pedro.ms.bogalho@gmail.com'
+      );
+    }
+
+    // User registrations
+    match /users/{userId} {
+      // Users can read/write their own registration
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      // Admin can manage all profiles
+      allow read, write: if isAdmin();
+    }
+
+    // Shared collections (accessible ONLY to approved users)
+    match /people/{personId} {
+      allow read, write: if isApproved();
+    }
+
+    match /families/{familyId} {
+      allow read, write: if isApproved();
+    }
+
+    match /structures/{structureId} {
+      allow read, write: if isApproved();
     }
   }
 }

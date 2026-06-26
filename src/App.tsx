@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Person, Family, UserRole, JohreiCenterStructure } from './types';
+import { Person, Family, UserRole, JohreiCenterStructure, AppUser } from './types';
 import { INITIAL_PEOPLE, INITIAL_FAMILIES } from './demoData';
 import DashboardView from './components/DashboardView';
 import PeopleView from './components/PeopleView';
@@ -16,6 +16,7 @@ import FamiliesView from './components/FamiliesView';
 import PendenciesView from './components/PendenciesView';
 import ReportsView from './components/ReportsView';
 import StructureView from './components/StructureView';
+import UserApprovalsView from './components/UserApprovalsView';
 import { parseCSV, generateSampleCSVString } from './utils/csvParser';
 import {
   auth,
@@ -24,7 +25,11 @@ import {
   savePeopleBatchToFirebase,
   fetchStructureFromFirebase,
   saveStructureToFirebase,
-  clearAllFirebaseData
+  clearAllFirebaseData,
+  createAppUserOrGet,
+  onAppUserChangeRealtime,
+  fetchAllAppUsers,
+  updateAppUserApproval
 } from './utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import AuthView from './components/AuthView';
@@ -75,6 +80,8 @@ export default function App() {
 
   // Auth state
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentAppUser, setCurrentAppUser] = useState<AppUser | null>(null);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
   // Loading state for Firebase
@@ -171,65 +178,108 @@ export default function App() {
 
   // Load from Firebase on application start depending on authentication
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeRealtime: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubscribeRealtime) {
+        unsubscribeRealtime();
+        unsubscribeRealtime = null;
+      }
+
       if (user) {
         setCurrentUser(user);
         setIsLoading(true);
         try {
-          const fbPeople = await fetchPeopleFromFirebase(user.uid);
-          const fbStructure = await fetchStructureFromFirebase(user.uid);
-        
-          if (fbPeople && fbPeople.length > 0) {
-            const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
-            setPeople(cleanPeople);
-            localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
-          } else {
-            // Check for previous cache migration
-            const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-            if (cachedPeople) {
-              const parsed = JSON.parse(cachedPeople);
-              if (parsed.length > 0) {
-                const cleanPeople = cleanAndDeDuplicatePeople(parsed);
-                setPeople(cleanPeople);
-                savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
+          // Garante que o documento de perfil no Firestore existe
+          const userEmail = user.email || `${user.displayName?.toLowerCase().replace(/\s+/g, '') || 'usuario'}@jornadajc.app.local`;
+          const initialProfile = await createAppUserOrGet(user.uid, userEmail, user.displayName || '');
+          setCurrentAppUser(initialProfile);
+          setUserRole(initialProfile.role);
+
+          // Escuta em tempo real as mudanças no perfil (ex: aprovação pelo administrador)
+          unsubscribeRealtime = onAppUserChangeRealtime(user.uid, async (latestAppUser) => {
+            if (latestAppUser) {
+              setCurrentAppUser(latestAppUser);
+              setUserRole(latestAppUser.role);
+
+              if (latestAppUser.approved) {
+                // Se aprovado, carrega os dados compartilhados
+                setIsLoading(true);
+                try {
+                  const fbPeople = await fetchPeopleFromFirebase(user.uid);
+                  const fbStructure = await fetchStructureFromFirebase(user.uid);
+                
+                  if (fbPeople && fbPeople.length > 0) {
+                    const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
+                    setPeople(cleanPeople);
+                    localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
+                  } else {
+                    const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+                    if (cachedPeople) {
+                      const parsed = JSON.parse(cachedPeople);
+                      if (parsed.length > 0) {
+                        const cleanPeople = cleanAndDeDuplicatePeople(parsed);
+                        setPeople(cleanPeople);
+                        savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
+                      }
+                    } else {
+                      setPeople([]);
+                    }
+                  }
+
+                  if (fbStructure) {
+                    setStructure(fbStructure);
+                    localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
+                  } else {
+                    const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+                    if (cachedStructure) {
+                      const parsed = JSON.parse(cachedStructure);
+                      setStructure(parsed);
+                      saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+                    } else {
+                      setStructure(DEFAULT_STRUCTURE);
+                      saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+                    }
+                  }
+                } catch (error) {
+                  console.error("Failed to load user database, falling back to LocalStorage:", error);
+                  const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+                  const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+                  if (cachedPeople) {
+                    setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
+                  }
+                  if (cachedStructure) {
+                    setStructure(JSON.parse(cachedStructure));
+                  } else {
+                    setStructure(DEFAULT_STRUCTURE);
+                  }
+                } finally {
+                  setIsLoading(false);
+                  setAuthLoading(false);
+                }
+              } else {
+                // Se não aprovado, limpa os dados em tela e aguarda aprovação
+                setPeople([]);
+                setStructure(DEFAULT_STRUCTURE);
+                setIsLoading(false);
+                setAuthLoading(false);
               }
             } else {
+              setCurrentAppUser(null);
               setPeople([]);
-            }
-          }
-
-          if (fbStructure) {
-            setStructure(fbStructure);
-            localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
-          } else {
-            const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-            if (cachedStructure) {
-              const parsed = JSON.parse(cachedStructure);
-              setStructure(parsed);
-              saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
-            } else {
               setStructure(DEFAULT_STRUCTURE);
-              saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+              setIsLoading(false);
+              setAuthLoading(false);
             }
-          }
+          });
         } catch (error) {
-          console.error("Failed to load user database, falling back to LocalStorage:", error);
-          const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-          const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-          if (cachedPeople) {
-            setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
-          }
-          if (cachedStructure) {
-            setStructure(JSON.parse(cachedStructure));
-          } else {
-            setStructure(DEFAULT_STRUCTURE);
-          }
-        } finally {
+          console.error("Error setting up user session:", error);
           setIsLoading(false);
           setAuthLoading(false);
         }
       } else {
         setCurrentUser(null);
+        setCurrentAppUser(null);
         setPeople([]);
         setStructure(DEFAULT_STRUCTURE);
         setAuthLoading(false);
@@ -237,8 +287,22 @@ export default function App() {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeRealtime) {
+        unsubscribeRealtime();
+      }
+    };
   }, []);
+
+  // Carrega a lista de usuários registrados caso o usuário atual seja Administrador
+  useEffect(() => {
+    if (currentUser && currentAppUser?.role === 'ADMIN') {
+      fetchAllAppUsers()
+        .then(setAppUsers)
+        .catch(err => console.error("Falha ao carregar lista de usuários para administração:", err));
+    }
+  }, [currentUser, currentAppUser]);
 
   // Compute families dynamically whenever the people list changes
   useEffect(() => {
@@ -550,6 +614,61 @@ export default function App() {
     return <AuthView onAuthSuccess={() => {}} />;
   }
 
+  // Guard: if authenticated but not approved yet, render the pending approval view
+  if (currentUser && currentAppUser && !currentAppUser.approved) {
+    return (
+      <div className="min-h-screen font-sans flex relative overflow-hidden bg-[#f4f5f7] text-slate-800">
+        {/* Decorative background spots */}
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-400/10 blur-[120px] pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-orange-400/10 blur-[120px] pointer-events-none"></div>
+
+        <div className="w-full flex items-center justify-center min-h-screen z-10 p-6">
+          <div className="max-w-md w-full bg-white/75 backdrop-blur-md rounded-2xl border border-slate-200/60 p-8 shadow-xl text-center space-y-6 animate-fade-in">
+            <div className="mx-auto w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-600">
+              <Shield className="w-8 h-8 animate-pulse" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-sans font-bold tracking-tight text-slate-900">Acesso em Análise</h2>
+              <p className="text-sm text-slate-600 font-medium">
+                Você solicitou acesso ao app, aguarde o administrador.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/40 text-left space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400 font-medium font-mono uppercase">Usuário</span>
+                <span className="font-semibold text-slate-700 truncate max-w-[200px]">{currentAppUser.email}</span>
+              </div>
+              <div className="h-px bg-slate-200/50"></div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400 font-medium font-mono uppercase">Status</span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-bold text-xxs tracking-wide uppercase">
+                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
+                  Pendente
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xxs text-zinc-400 leading-relaxed font-mono">
+              Assim que o administrador aprovar seu acesso, esta tela será atualizada automaticamente em tempo real e você poderá usar o sistema.
+            </p>
+
+            <div className="pt-2">
+              <button
+                onClick={() => logoutUser()}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                Sair / Entrar com outra conta
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Loading screen during User Private Database retrieval
   if (isLoading) {
     return (
@@ -795,7 +914,12 @@ export default function App() {
 
             {/* Navigation links */}
             <nav className="p-3 space-y-1 flex-1">
-              {menuItems.map(item => {
+              {[
+                ...menuItems,
+                ...(currentAppUser?.role === 'ADMIN' ? [
+                  { id: 'approvals', label: 'Controle de Acesso', icon: Shield }
+                ] : [])
+              ].map(item => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -815,7 +939,7 @@ export default function App() {
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
                     {!isSidebarCollapsed && <span className="flex-1 truncate">{item.label}</span>}
-                    {!isSidebarCollapsed && item.alertCount && totalAlerts > 0 && (
+                    {!isSidebarCollapsed && 'alertCount' in item && item.alertCount && totalAlerts > 0 && (
                       <span className="px-1.5 py-0.2 bg-orange-500 text-white rounded-full font-mono text-[9px] font-bold">
                         {totalAlerts}
                       </span>
@@ -981,6 +1105,12 @@ export default function App() {
                 people={people} 
                 families={families} 
                 isDark={isDark} 
+              />
+            )}
+
+            {activeTab === 'approvals' && (
+              <UserApprovalsView 
+                currentUserUid={currentUser.uid} 
               />
             )}
           </div>

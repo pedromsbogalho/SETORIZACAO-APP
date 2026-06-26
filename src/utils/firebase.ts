@@ -13,7 +13,9 @@ import {
   getDoc, 
   writeBatch,
   deleteDoc,
-  getDocFromServer
+  getDocFromServer,
+  onSnapshot,
+  updateDoc
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -26,7 +28,7 @@ import {
   User
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Person, Family, JohreiCenterStructure } from '../types';
+import { Person, Family, JohreiCenterStructure, AppUser } from '../types';
 
 // Load config from environment variables (useful for production) or fallback to local JSON config
 const metaEnv = (import.meta as any).env || {};
@@ -356,3 +358,90 @@ export async function clearAllFirebaseData(userId: string): Promise<void> {
     handleFirestoreError(err, OperationType.DELETE, `shared_data`);
   }
 }
+
+// --- USER MANAGEMENT & APPROVALS API ---
+
+const ADMIN_EMAIL = 'pedro.ms.bogalho@gmail.com';
+
+export async function getAppUser(uid: string): Promise<AppUser | null> {
+  const path = `users/${uid}`;
+  try {
+    const docSnap = await getDoc(doc(db, 'users', uid));
+    if (docSnap.exists()) {
+      return docSnap.data() as AppUser;
+    }
+    return null;
+  } catch (err) {
+    console.error(`Error fetching AppUser ${uid}:`, err);
+    return null;
+  }
+}
+
+export async function createAppUserOrGet(uid: string, email: string, displayName?: string): Promise<AppUser> {
+  const path = `users/${uid}`;
+  try {
+    const existingUser = await getAppUser(uid);
+    if (existingUser) {
+      return existingUser;
+    }
+
+    // Determine default status and role
+    const isOwner = email.toLowerCase().trim() === ADMIN_EMAIL;
+    const newUser: AppUser = {
+      uid,
+      email: email.trim(),
+      displayName: displayName || email.split('@')[0],
+      role: isOwner ? 'ADMIN' : 'ASSISTANT',
+      approved: isOwner, // Admin is pre-approved
+      requestDate: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, 'users', uid), newUser);
+    return newUser;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+    throw err;
+  }
+}
+
+export function onAppUserChangeRealtime(uid: string, callback: (user: AppUser | null) => void): () => void {
+  const userRef = doc(db, 'users', uid);
+  return onSnapshot(userRef, (snapshot) => {
+    if (snapshot.exists()) {
+      callback(snapshot.data() as AppUser);
+    } else {
+      callback(null);
+    }
+  }, (err) => {
+    console.error(`Error in onAppUserChangeRealtime for ${uid}:`, err);
+    callback(null);
+  });
+}
+
+export async function fetchAllAppUsers(): Promise<AppUser[]> {
+  const path = `users`;
+  try {
+    const querySnapshot = await getDocs(collection(db, 'users'));
+    const list: AppUser[] = [];
+    querySnapshot.forEach((document) => {
+      list.push(document.data() as AppUser);
+    });
+    return list;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return [];
+  }
+}
+
+export async function updateAppUserApproval(uid: string, approved: boolean, role: 'ADMIN' | 'AM' | 'ASSISTANT' = 'ASSISTANT'): Promise<void> {
+  const path = `users/${uid}`;
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      approved,
+      role
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+}
+
