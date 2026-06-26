@@ -27,11 +27,77 @@ export default function FrequentersView({
 }: FrequentersViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterSector, setFilterSector] = useState<string>('ALL');
+  const [sortField, setSortField] = useState<string>('nome');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Column resizing state (initial widths for columns)
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    id: 110,
+    nome: 240,
+    tipo: 100,
+    etapa: 200,
+    setor: 180,
+    bairro: 180,
+    celular: 140,
+    acoes: 100
+  });
+
+  const handleMouseDown = (e: React.MouseEvent, colKey: string) => {
+    e.preventDefault();
+    const startX = e.pageX;
+    const startWidth = colWidths[colKey] || 120;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(60, startWidth + (moveEvent.pageX - startX));
+      setColWidths(prev => ({
+        ...prev,
+        [colKey]: newWidth
+      }));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+    setPageIndex(0);
+  };
+
+  // Get sector statistics for frequenters
+  const sectorStats = React.useMemo(() => {
+    const stats: Record<string, number> = {};
+    people.forEach(p => {
+      if (p.subtipoCadastro === 'FREQUENTADOR') {
+        const sector = p.setor2 || 'SEM SETOR';
+        stats[sector] = (stats[sector] || 0) + 1;
+      }
+    });
+    return Object.entries(stats)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [people]);
+
+  // Unique list of sectors for filter
+  const sectorsList = React.useMemo(() => {
+    return sectorStats.map(s => s.name).sort();
+  }, [sectorStats]);
 
   // Row limits & pagination
   const [rowsLimit, setRowsLimit] = useState<number>(10);
@@ -259,6 +325,10 @@ export default function FrequentersView({
     filtered = filtered.filter(p => p.statusAtual === filterStatus);
   }
 
+  if (filterSector !== 'ALL') {
+    filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === filterSector.toUpperCase());
+  }
+
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase();
     filtered = filtered.filter(p => {
@@ -273,6 +343,56 @@ export default function FrequentersView({
       );
     });
   }
+
+  // Sort logic
+  const sortedPeople = React.useMemo(() => {
+    const sorted = [...filtered];
+    return sorted.sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+
+      switch (sortField) {
+        case 'id':
+          valA = a.id || '';
+          valB = b.id || '';
+          break;
+        case 'nome':
+          valA = a.nome || '';
+          valB = b.nome || '';
+          break;
+        case 'setor2':
+          valA = a.setor2 || '';
+          valB = b.setor2 || '';
+          break;
+        case 'bairroAjustado':
+          valA = a.bairroAjustado || '';
+          valB = b.bairroAjustado || '';
+          break;
+        case 'celularPrincipal':
+          valA = a.celularPrincipal || '';
+          valB = b.celularPrincipal || '';
+          break;
+        case 'jornadaEtapa':
+          valA = a.jornadaEtapa || '';
+          valB = b.jornadaEtapa || '';
+          break;
+        default:
+          valA = a.nome || '';
+          valB = b.nome || '';
+      }
+
+      if (valA === valB) return 0;
+      if (valA === null || valA === undefined || valA === '') return 1;
+      if (valB === null || valB === undefined || valB === '') return -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+
+      const comparison = String(valA).localeCompare(String(valB), 'pt-BR', { numeric: true, sensitivity: 'base' });
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [filtered, sortField, sortOrder]);
 
   // Export
   const handleExportCSV = () => {
@@ -304,9 +424,9 @@ export default function FrequentersView({
   };
 
   // Pagination slice
-  const totalRows = filtered.length;
+  const totalRows = sortedPeople.length;
   const pageCount = Math.ceil(totalRows / rowsLimit);
-  const displayedPeople = filtered.slice(pageIndex * rowsLimit, (pageIndex + 1) * rowsLimit);
+  const displayedPeople = sortedPeople.slice(pageIndex * rowsLimit, (pageIndex + 1) * rowsLimit);
 
   const handlePageChange = (newIndex: number) => {
     if (newIndex >= 0 && newIndex < pageCount) {
@@ -349,6 +469,40 @@ export default function FrequentersView({
         </div>
       </div>
 
+      {/* Sector Segment Cards */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400">Frequentadores por Setor</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <button
+            onClick={() => { setFilterSector('ALL'); setPageIndex(0); }}
+            className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden backdrop-blur-md cursor-pointer ${
+              filterSector === 'ALL'
+                ? 'bg-teal-600/10 border-teal-500/50 text-teal-700 dark:text-teal-400 shadow-xs'
+                : 'bg-white/40 dark:bg-zinc-900/40 border-slate-200/60 dark:border-white/5 text-zinc-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/40'
+            }`}
+          >
+            <span className="block text-[10px] font-mono uppercase tracking-wider opacity-60">Todos</span>
+            <span className="block text-2xl font-bold font-display mt-1">{people.filter(p => p.subtipoCadastro === 'FREQUENTADOR').length}</span>
+            <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-teal-500" />
+          </button>
+
+          {sectorStats.map(stat => (
+            <button
+              key={stat.name}
+              onClick={() => { setFilterSector(stat.name); setPageIndex(0); }}
+              className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden backdrop-blur-md cursor-pointer ${
+                filterSector.toUpperCase() === stat.name.toUpperCase()
+                  ? 'bg-teal-600/10 border-teal-500/50 text-teal-700 dark:text-teal-400 shadow-xs'
+                  : 'bg-white/40 dark:bg-zinc-900/40 border-slate-200/60 dark:border-white/5 text-zinc-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/40'
+              }`}
+            >
+              <span className="block text-[10px] font-mono uppercase tracking-wider opacity-60 truncate">{stat.name}</span>
+              <span className="block text-2xl font-bold font-display mt-1">{stat.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Control Bar (Search + Filters + Row Limiter) */}
       <div className="p-4 rounded-xl glass-panel shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
@@ -364,6 +518,21 @@ export default function FrequentersView({
           </div>
 
           <div className="flex flex-wrap gap-3 items-center">
+            {/* Filter by Sector */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Setor:</span>
+              <select 
+                value={filterSector}
+                onChange={(e) => { setFilterSector(e.target.value); setPageIndex(0); }}
+                className={`text-xs py-1.5 px-2.5 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none`}
+              >
+                <option value="ALL">Todos os Setores</option>
+                {sectorsList.map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Filter by Status */}
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Status:</span>
@@ -403,14 +572,115 @@ export default function FrequentersView({
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className={`text-[10px] font-mono uppercase tracking-wider ${isDark ? 'bg-zinc-950/40 text-zinc-400' : 'bg-slate-100/40 text-slate-500'} border-b border-slate-200/40 dark:border-white/5`}>
-                <th className="py-3.5 px-4 font-bold">Código</th>
-                <th className="py-3.5 px-4 font-bold">Nome Completo</th>
-                <th className="py-3.5 px-4 font-bold">Tipo</th>
-                <th className="py-3.5 px-4 font-bold">Acompanhamento</th>
-                <th className="py-3.5 px-4 font-bold">Setor / AM</th>
-                <th className="py-3.5 px-4 font-bold">Bairro / Família</th>
-                <th className="py-3.5 px-4 font-bold">Celular</th>
-                <th className="py-3.5 px-4 font-bold text-right">Ações</th>
+                <th 
+                  onClick={() => handleSort('id')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.id, minWidth: colWidths.id }}
+                >
+                  <div className="flex items-center gap-1">
+                    Código {sortField === 'id' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'id')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  onClick={() => handleSort('nome')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.nome, minWidth: colWidths.nome }}
+                >
+                  <div className="flex items-center gap-1">
+                    Nome Completo {sortField === 'nome' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'nome')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  onClick={() => handleSort('tipoCadastro')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.tipo, minWidth: colWidths.tipo }}
+                >
+                  <div className="flex items-center gap-1">
+                    Tipo {sortField === 'tipoCadastro' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'tipo')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  onClick={() => handleSort('jornadaEtapa')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.etapa, minWidth: colWidths.etapa }}
+                >
+                  <div className="flex items-center gap-1">
+                    Acompanhamento {sortField === 'jornadaEtapa' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'etapa')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  onClick={() => handleSort('setor2')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.setor, minWidth: colWidths.setor }}
+                >
+                  <div className="flex items-center gap-1">
+                    Setor / AM {sortField === 'setor2' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'setor')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  onClick={() => handleSort('bairroAjustado')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.bairro, minWidth: colWidths.bairro }}
+                >
+                  <div className="flex items-center gap-1">
+                    Bairro / Família {sortField === 'bairroAjustado' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'bairro')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  onClick={() => handleSort('celularPrincipal')}
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.celular, minWidth: colWidths.celular }}
+                >
+                  <div className="flex items-center gap-1">
+                    Celular {sortField === 'celularPrincipal' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'celular')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
+                <th 
+                  className="relative py-3.5 px-4 font-bold text-right select-none group"
+                  style={{ width: colWidths.acoes, minWidth: colWidths.acoes }}
+                >
+                  Ações
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'acoes')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs">

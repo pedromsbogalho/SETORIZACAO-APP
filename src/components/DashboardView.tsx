@@ -132,33 +132,6 @@ export default function DashboardView({ people, families, onNavigate, isDark }: 
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="p-6 rounded-2xl glass-panel transition-all duration-300 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-sans font-semibold tracking-tight font-display">Painel de Indicadores — Johrei Center</h1>
-          <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-            Acompanhamento em tempo real da jornada espiritual, assistência familiar e pendências de desenvolvimento.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            id="btn-goto-people"
-            onClick={() => onNavigate('people')}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white transition-colors shadow-sm cursor-pointer"
-          >
-            Fazer Upload / Ver Membros
-          </button>
-          <button
-            id="btn-goto-pendencies"
-            onClick={() => onNavigate('pendencies')}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-orange-500 hover:bg-orange-600 text-white transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            Pendências ({totalPendencies})
-          </button>
-        </div>
-      </div>
-
       {/* Grid de Métricas Principais */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Total Membros (clicável) */}

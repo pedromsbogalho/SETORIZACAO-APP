@@ -43,7 +43,7 @@ const app = initializeApp({
 export let db = getFirestore(app, firestoreDatabaseId || '(default)');
 
 // Helper function to enforce a timeout on asynchronous operations
-export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 4000): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 2500): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error(`Timeout of ${timeoutMs}ms exceeded while connecting to Firebase`));
@@ -63,7 +63,7 @@ export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 4000): P
 // Test connection and auto-recovery to (default) database if custom db is not accessible
 async function testAndRecoverConnection() {
   try {
-    await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 3000);
+    await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 1500);
     console.log(`Firebase connection to database "${firestoreDatabaseId}" verified successfully!`);
   } catch (error: any) {
     console.warn(`Connection to database "${firestoreDatabaseId}" failed:`, error);
@@ -71,7 +71,7 @@ async function testAndRecoverConnection() {
       console.log("Attempting to fall back to '(default)' database...");
       try {
         db = getFirestore(app, '(default)');
-        await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 3000);
+        await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 1500);
         console.log("Fallback to '(default)' database succeeded!");
       } catch (fallbackError) {
         console.error("Fallback to '(default)' database also failed:", fallbackError);
@@ -86,7 +86,7 @@ testAndRecoverConnection();
 export async function fetchPeopleFromFirebase(): Promise<Person[]> {
   try {
     // Wrap with a timeout to fail fast and fall back to local storage instead of hanging forever
-    const querySnapshot = await withTimeout(getDocs(collection(db, 'people')), 4000);
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'people')), 2500);
     const list: Person[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Person);
@@ -139,7 +139,7 @@ export async function savePeopleBatchToFirebase(peopleList: Person[]): Promise<v
 
 export async function fetchFamiliesFromFirebase(): Promise<Family[]> {
   try {
-    const querySnapshot = await withTimeout(getDocs(collection(db, 'families')), 4000);
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'families')), 2500);
     const list: Family[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Family);
@@ -193,7 +193,7 @@ const STRUCTURE_DOC_ID = 'current_structure';
 
 export async function fetchStructureFromFirebase(): Promise<JohreiCenterStructure | null> {
   try {
-    const docSnap = await withTimeout(getDoc(doc(db, 'structures', STRUCTURE_DOC_ID)), 4000);
+    const docSnap = await withTimeout(getDoc(doc(db, 'structures', STRUCTURE_DOC_ID)), 2500);
     if (docSnap.exists()) {
       return docSnap.data() as JohreiCenterStructure;
     }

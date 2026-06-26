@@ -15,9 +15,14 @@ interface TreeViewProps {
 }
 
 export default function TreeView({ people, families, structure, isDark }: TreeViewProps) {
-  // Expanded states for Bairros and Families
+  // Expanded states for Sectors, Bairros and Families
+  const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [expandedBairros, setExpandedBairros] = useState<Record<string, boolean>>({});
   const [expandedFamilies, setExpandedFamilies] = useState<Record<string, boolean>>({});
+
+  const toggleSector = (sectorName: string) => {
+    setExpandedSectors(prev => ({ ...prev, [sectorName]: !prev[sectorName] }));
+  };
 
   const toggleBairro = (bairroId: string) => {
     setExpandedBairros(prev => ({ ...prev, [bairroId]: !prev[bairroId] }));
@@ -94,21 +99,31 @@ export default function TreeView({ people, families, structure, isDark }: TreeVi
             af => af.sector.toUpperCase() === sectorName.toUpperCase()
           );
 
+          const isSectorExpanded = expandedSectors[sectorName] !== false; // expanded by default
+
           return (
             <div 
               key={sectorName} 
-              className="rounded-2xl glass-panel p-5 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-200/40 dark:border-white/5 space-y-4 flex flex-col justify-between"
+              className="rounded-2xl glass-panel p-4 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-200/40 dark:border-white/5 space-y-4"
             >
-              <div className="space-y-4">
+              <div>
                 {/* Sector Card Header */}
-                <div className="flex justify-between items-start border-b border-slate-200/40 dark:border-white/5 pb-3">
+                <div 
+                  onClick={() => toggleSector(sectorName)}
+                  className="flex justify-between items-center cursor-pointer select-none pb-2 hover:opacity-80 transition-opacity"
+                >
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
                       <Compass className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-sans font-bold text-sm tracking-tight text-slate-800 dark:text-zinc-100 uppercase">
+                      <h3 className="font-sans font-bold text-sm tracking-tight text-slate-800 dark:text-zinc-100 uppercase flex items-center gap-1.5">
                         {sectorName}
+                        {isSectorExpanded ? (
+                          <ChevronDown className="w-4 h-4 text-zinc-400" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-zinc-400" />
+                        )}
                       </h3>
                       <p className="text-[10px] font-mono text-zinc-400">Setor Externo</p>
                     </div>
@@ -120,6 +135,9 @@ export default function TreeView({ people, families, structure, isDark }: TreeVi
                     <p className="text-[10px] text-zinc-400 mt-1 font-mono">{totalFamilies} Famílias</p>
                   </div>
                 </div>
+
+                {isSectorExpanded && (
+                  <div className="mt-4 space-y-4 transition-all duration-300">
 
                 {/* Responsible Leaders (AM & AFs) */}
                 <div className="p-3.5 rounded-xl bg-slate-50/50 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -249,6 +267,8 @@ export default function TreeView({ people, families, structure, isDark }: TreeVi
                     })}
                   </div>
                 </div>
+              </div>
+            )}
               </div>
             </div>
           );

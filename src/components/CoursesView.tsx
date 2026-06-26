@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Person } from '../types';
-import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle } from 'lucide-react';
+import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle, Clock } from 'lucide-react';
 
 interface CoursesViewProps {
   people: Person[];
@@ -17,9 +17,51 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
   const [activeTab, setActiveTab] = useState<'iniciacao' | 'pos-outorga'>('iniciacao');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
+  const [memberTimeFilter, setMemberTimeFilter] = useState<'all' | 'recent' | '1-3' | '3plus' | 'none'>('all');
 
   // Extract unique sectors list
   const sectorsList = Array.from(new Set(people.map(p => p.setor2 || 'SEM SETOR').filter(Boolean)));
+
+  // Memoized stats for Curso Pós-Outorga
+  const posOutorgaStats = useMemo(() => {
+    const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; inProgress: number; notStarted: number }> = {
+      1: { completed: 0, inProgress: 0, notStarted: 0 },
+      2: { completed: 0, inProgress: 0, notStarted: 0 },
+      3: { completed: 0, inProgress: 0, notStarted: 0 },
+      4: { completed: 0, inProgress: 0, notStarted: 0 },
+      5: { completed: 0, inProgress: 0, notStarted: 0 },
+    };
+
+    const sectors: Record<string, number> = {};
+
+    const members = people.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari');
+
+    members.forEach(m => {
+      const aulas = m.cursoPosOutorga?.aulas || {};
+      const sector = m.setor2 || 'SEM SETOR';
+
+      let hasParticipated = false;
+
+      ([1, 2, 3, 4, 5] as const).forEach(num => {
+        const status = aulas[num] || 'Não iniciou';
+        if (status === 'Concluido' || status === 'Concluído') {
+          lessons[num].completed++;
+          hasParticipated = true;
+        } else if (status === 'Em andamento') {
+          lessons[num].inProgress++;
+          hasParticipated = true;
+        } else {
+          lessons[num].notStarted++;
+        }
+      });
+
+      if (hasParticipated) {
+        sectors[sector] = (sectors[sector] || 0) + 1;
+      }
+    });
+
+    return { lessons, sectors };
+  }, [people]);
 
   // Course handlers
   const handleIniciacaoChange = (id: string, field: string, value: any) => {
@@ -233,10 +275,89 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
 
       {/* Tab 2: Curso Pós-Outorga (5 Aulas) */}
       {activeTab === 'pos-outorga' && (
-        <div className="p-6 rounded-xl glass-panel shadow-sm space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-200/40 dark:border-white/5">
-            <Award className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-            <h3 className="text-sm font-sans font-bold">Acompanhamento das 5 Aulas Teológicas do Curso Pós-Outorga</h3>
+        <div className="p-6 rounded-xl glass-panel shadow-sm space-y-6">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200/40 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+              <h3 className="text-sm font-sans font-bold">Acompanhamento das 5 Aulas Teológicas do Curso Pós-Outorga</h3>
+            </div>
+          </div>
+
+          {/* Time Filter Option */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50/50 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Tempo de Outorga (Tempo de Membro):</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'recent', '1-3', '3plus', 'none'] as const).map(option => {
+                const labels = {
+                  all: 'Todos',
+                  recent: 'Recente (≤ 1 ano)',
+                  '1-3': '1 a 3 anos',
+                  '3plus': 'Mais de 3 anos',
+                  none: 'Sem ano'
+                };
+                return (
+                  <button
+                    key={option}
+                    onClick={() => setMemberTimeFilter(option)}
+                    className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                      memberTimeFilter === option
+                        ? 'bg-teal-600 text-white border-teal-600'
+                        : 'bg-white/50 dark:bg-zinc-900/50 border-slate-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    {labels[option]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Lessons Cards */}
+          <div className="space-y-2">
+            <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Pessoas por Aula</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              {([1, 2, 3, 4, 5] as const).map(lessonNum => {
+                const stats = posOutorgaStats.lessons[lessonNum];
+                return (
+                  <div key={lessonNum} className="p-3.5 rounded-xl border border-slate-200/40 dark:border-white/5 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md">
+                    <span className="block text-xs font-bold text-teal-600 dark:text-teal-400 font-display">Aula {lessonNum}</span>
+                    <div className="mt-2 space-y-1.5 text-[10px] font-mono">
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <span>Fizeram:</span>
+                        <span>{stats.completed}</span>
+                      </div>
+                      <div className="flex justify-between text-orange-500 font-semibold">
+                        <span>Fazendo:</span>
+                        <span>{stats.inProgress}</span>
+                      </div>
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Pendente:</span>
+                        <span>{stats.notStarted}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sectors Cards */}
+          <div className="space-y-2">
+            <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Participantes por Setor</h4>
+            <div className="flex flex-wrap gap-2.5">
+              {Object.entries(posOutorgaStats.sectors).map(([sectorName, count]) => (
+                <div key={sectorName} className="px-3 py-1.5 rounded-lg border border-teal-500/10 bg-teal-500/5 text-teal-700 dark:text-teal-400 text-[10px] font-bold uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+                  {sectorName}: {count} {count === 1 ? 'membro' : 'membros'}
+                </div>
+              ))}
+              {Object.keys(posOutorgaStats.sectors).length === 0 && (
+                <div className="text-[10px] text-zinc-400 italic">Nenhum membro participando ativamente das aulas no momento.</div>
+              )}
+            </div>
           </div>
 
           <p className="text-xs text-zinc-400 italic">
@@ -257,7 +378,17 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari').map(p => {
+                {filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari').filter(p => {
+                  if (memberTimeFilter === 'all') return true;
+                  const ano = p.anoOutorga ? Number(p.anoOutorga) : null;
+                  if (!ano) return memberTimeFilter === 'none';
+                  const currentYear = 2026;
+                  const diff = currentYear - ano;
+                  if (memberTimeFilter === 'recent') return diff <= 1;
+                  if (memberTimeFilter === '1-3') return diff > 1 && diff <= 3;
+                  if (memberTimeFilter === '3plus') return diff > 3;
+                  return true;
+                }).map(p => {
                   const aulas = p.cursoPosOutorga.aulas;
                   const completedCount = Object.values(aulas).filter(v => v === 'Concluido' || v === 'Concluído').length;
                   const progressPercentage = completedCount * 20;
@@ -311,7 +442,17 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                     </tr>
                   );
                 })}
-                {filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari').length === 0 && (
+                {filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari').filter(p => {
+                  if (memberTimeFilter === 'all') return true;
+                  const ano = p.anoOutorga ? Number(p.anoOutorga) : null;
+                  if (!ano) return memberTimeFilter === 'none';
+                  const currentYear = 2026;
+                  const diff = currentYear - ano;
+                  if (memberTimeFilter === 'recent') return diff <= 1;
+                  if (memberTimeFilter === '1-3') return diff > 1 && diff <= 3;
+                  if (memberTimeFilter === '3plus') return diff > 3;
+                  return true;
+                }).length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-zinc-400 italic">
                       Nenhum membro outorgado encontrado para acompanhar o curso pós-outorga.

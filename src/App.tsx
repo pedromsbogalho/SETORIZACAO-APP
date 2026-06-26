@@ -87,10 +87,20 @@ export default function App() {
   // Helper to dynamically link family IDs based on identical household addresses (person with oldest age is head)
   // Respeita o idFamilia original da planilha quando já preenchido
   const enrichPeopleWithFamilyIds = (pList: Person[]): Person[] => {
+    // De-duplicate people by ID to prevent key-uniqueness issues in React
+    const seenIds = new Set<string>();
+    const uniqueList = pList.filter(p => {
+      if (!p.id) return false;
+      const key = p.id.trim();
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      return true;
+    });
+
     const groups: Record<string, Person[]> = {};
     
     // Só agrupa por endereço pessoas que NÃO têm idFamilia original válido
-    pList.forEach(p => {
+    uniqueList.forEach(p => {
       // Se já tem um idFamilia válido (ex: FAM-444 vindo da planilha), preserva
       if (p.idFamilia && /^FAM-/.test(p.idFamilia)) {
         return;
@@ -116,7 +126,7 @@ export default function App() {
       }, list[0]);
     };
     
-    return pList.map(p => {
+    return uniqueList.map(p => {
       // Se já tem idFamilia válido, preserva
       if (p.idFamilia && /^FAM-/.test(p.idFamilia)) {
         return p;
@@ -139,6 +149,18 @@ export default function App() {
     });
   };
 
+  // Helper to de-duplicate and clean loaded people
+  const cleanAndDeDuplicatePeople = (pList: Person[]): Person[] => {
+    const seenIds = new Set<string>();
+    return pList.filter(p => {
+      if (!p.id) return false;
+      const key = p.id.trim();
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      return true;
+    });
+  };
+
   // Load from Firebase on application start
   useEffect(() => {
 
@@ -150,17 +172,19 @@ export default function App() {
         const fbStructure = await fetchStructureFromFirebase();
         
         if (fbPeople && fbPeople.length > 0) {
-          setPeople(fbPeople);
-          localStorage.setItem('jc_people', JSON.stringify(fbPeople));
+          const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
+          setPeople(cleanPeople);
+          localStorage.setItem('jc_people', JSON.stringify(cleanPeople));
         } else {
           // If Firebase is empty, check if we have LocalStorage cached data to migrate
           const cachedPeople = localStorage.getItem('jc_people');
           if (cachedPeople) {
             const parsed = JSON.parse(cachedPeople);
             if (parsed.length > 0) {
-              setPeople(parsed);
+              const cleanPeople = cleanAndDeDuplicatePeople(parsed);
+              setPeople(cleanPeople);
               // Migrate to Firebase asynchronously to keep app ready
-              savePeopleBatchToFirebase(parsed).catch(err => console.error("Auto-migration of people failed:", err));
+              savePeopleBatchToFirebase(cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
             }
           } else {
             setPeople([]);
@@ -188,7 +212,8 @@ export default function App() {
         const cachedPeople = localStorage.getItem('jc_people');
         const cachedStructure = localStorage.getItem('jc_structure');
         if (cachedPeople) {
-          setPeople(JSON.parse(cachedPeople));
+          const parsed = JSON.parse(cachedPeople);
+          setPeople(cleanAndDeDuplicatePeople(parsed));
         }
         if (cachedStructure) {
           setStructure(JSON.parse(cachedStructure));
