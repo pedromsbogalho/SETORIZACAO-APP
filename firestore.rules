@@ -1,23 +1,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Shared data accessible by any authenticated user
-    match /people/{personId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    match /structures/{structureId} {
-      allow read, write: if request.auth != null;
+    // Collections owned by the authenticated user
+    match /users/{userId}/people/{personId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Legacy support or fallback
-    match /users/{userId}/{document=**} {
+    match /users/{userId}/families/{familyId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/structures/{structureId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
+
