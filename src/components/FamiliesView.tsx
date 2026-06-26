@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Person, Family } from '../types';
 import { Home, Plus, MapPin, Users, Heart, Award } from 'lucide-react';
+import FamilyGoogleMap from './FamilyGoogleMap';
 
 interface FamiliesViewProps {
   families: Family[];
@@ -177,30 +178,12 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
                 </div>
               </div>
 
-              {/* Schematic Map */}
-              <div className="space-y-2">
-                <span className="font-semibold text-xs block text-slate-700 dark:text-zinc-300">Localização Espiritual (Mapa Esquemático)</span>
-                <div className={`h-40 rounded-lg border ${isDark ? 'bg-zinc-950/60 border-zinc-800' : 'bg-slate-100/40 border-slate-200/40'} relative overflow-hidden flex items-center justify-center`}>
-                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:14px_24px]" />
-                  <div className="absolute top-10 left-0 right-0 h-1 bg-teal-500/10" />
-                  <div className="absolute top-0 bottom-0 left-24 w-1 bg-teal-500/10" />
-                  <div className="absolute top-28 left-0 right-0 h-1 bg-orange-500/10" />
-                  <div className="absolute top-0 bottom-0 left-64 w-1 bg-orange-500/10" />
-                  
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                    <div className="animate-bounce bg-teal-600 text-white p-1.5 rounded-full shadow-lg">
-                      <MapPin className="w-5 h-5" />
-                    </div>
-                    <div className="bg-zinc-900/90 text-white text-[10px] px-2 py-0.5 rounded font-bold mt-1 shadow-sm whitespace-nowrap">
-                      {selectedFamily.nome}
-                    </div>
-                  </div>
-
-                  <div className="absolute bottom-2 left-2 bg-zinc-900/60 text-white text-[9px] font-mono px-1.5 py-0.5 rounded">
-                    GPS Ref: -23.6226, -45.4125 ({selectedFamily.nome})
-                  </div>
-                </div>
-              </div>
+              {/* Schematic Map & Live Google Map */}
+              <FamilyGoogleMap 
+                address={selectedFamily.endereco} 
+                familyName={selectedFamily.nome} 
+                isDark={isDark} 
+              />
             </div>
 
             {/* Family Members base table */}
