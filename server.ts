@@ -73,12 +73,17 @@ Campos que você pode alterar dependendo do pedido:
   Valores possíveis para cada aula: 'Não iniciou', 'Em andamento', 'Concluído'.
 
 ATENÇÃO ÀS REGRAS:
-1. Retorne apenas os registros que precisarem de alteração. Se nenhum registro corresponder, retorne um array vazio de updates.
-2. Não altere o 'id' das pessoas de forma alguma. O 'id' deve ser preservado exatamente como recebido para mapearmos corretamente na volta.
-3. Se a solicitação pedir por exemplo "Deixe todos os membros com data de outorga superior a 2024 com a aula 1 e 2 concluída", você deve analisar a 'dataOutorga' (analisando o ano no formato DD/MM/YYYY) ou 'anoOutorga', e para os registros condizentes, atualizar cursoPosOutorga.aulas["1"] para "Concluído" e cursoPosOutorga.aulas["2"] para "Concluído".
+1. Retorne apenas os registros que precisarem de alteração. Se nenhum registro corresponder aos filtros do usuário, retorne um array vazio de updates e coloque na 'explanation' que nenhuma pessoa correspondeu aos critérios.
+2. Não altere o 'id' das pessoas de forma alguma. O 'id' deve ser preservado exatamente como recebido (seja número ou string) para mapearmos corretamente de volta.
+3. ATENÇÃO CRÍTICA A DATAS E COMPARAÇÕES:
+   - No banco de dados recebido, o campo 'dataOutorga' está no formato ISO 'YYYY-MM-DD' (ex: "2015-04-18" ou "2026-06-25").
+   - O usuário pode expressar datas no formato brasileiro/português 'DD/MM/YYYY' (ex: "01/01/2026") em seus comandos.
+   - Você DEVE converter ambas as datas e compará-las de forma estrita e cronológica (por exemplo, "2015-04-18" é ANTES de "01/01/2026").
+   - NUNCA faça comparação alfabética de strings de formatos diferentes (ex: comparar "2015-04-18" > "01/01/2026" alfabeticamente retorna true porque '2' > '0', o que é uma comparação errada pois 2015 é menor/anterior a 2026).
+   - Seja extremamente rigoroso ao filtrar as datas. Se o usuário pedir "pessoas com data de outorga depois de 01/01/2026" e nenhuma pessoa na lista possuir data de outorga superior a "2026-01-01", você deve retornar updates vazios e explicar isso na resposta (ex: "Nenhum membro correspondeu aos critérios de outorga após 01/01/2026.").
 4. Retorne um JSON válido com três propriedades:
    - 'success': boolean indicando se a IA entendeu e conseguiu processar com sucesso.
-   - 'explanation': uma frase em português explicando de forma simples, humilde e simpática o que foi alterado e em quantas pessoas. (Ex: "Atualizei as aulas 1 e 2 para concluídas em 4 membros que foram outorgados após 2024.")
+   - 'explanation': uma frase em português explicando de forma simples, humilde e simpática o que foi alterado e em quantas pessoas. (Ex: "Atualizei as aulas de 4 membros que foram outorgados após 2024 para Não iniciado.")
    - 'updates': array contendo objetos com '{ id: string, updates: object }' onde 'updates' possui apenas os campos a serem mesclados no registro original.`;
 
       // Generate content with Gemini

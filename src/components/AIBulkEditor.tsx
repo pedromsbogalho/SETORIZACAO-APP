@@ -122,7 +122,8 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
       const affectedNames: string[] = [];
 
       const updatedPeople = people.map(p => {
-        const updateObj = result.updates.find((u: any) => u.id === p.id);
+        // Safe string-based ID comparison to prevent type mismatch between numeric IDs
+        const updateObj = result.updates.find((u: any) => String(u.id) === String(p.id));
         if (updateObj) {
           affectedIds.add(p.id);
           affectedNames.push(p.nome);
@@ -130,13 +131,23 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
           // Deep merge the updates
           const merged = { ...p, ...updateObj.updates };
 
-          // Handle special deep object nested fields like cursoPosOutorga
-          if (updateObj.updates.cursoPosOutorga && p.cursoPosOutorga) {
+          // Handle special deep object nested fields like cursoPosOutorga safely even if original is missing
+          if (updateObj.updates.cursoPosOutorga) {
+            const existingAulas = p.cursoPosOutorga?.aulas || {
+              1: 'Não iniciou',
+              2: 'Não iniciou',
+              3: 'Não iniciou',
+              4: 'Não iniciou',
+              5: 'Não iniciou'
+            };
+            const incomingAulas = updateObj.updates.cursoPosOutorga.aulas || {};
             merged.cursoPosOutorga = {
-              ...p.cursoPosOutorga,
               aulas: {
-                ...p.cursoPosOutorga.aulas,
-                ...(updateObj.updates.cursoPosOutorga.aulas || {})
+                1: incomingAulas[1] || incomingAulas["1"] || existingAulas[1] || 'Não iniciou',
+                2: incomingAulas[2] || incomingAulas["2"] || existingAulas[2] || 'Não iniciou',
+                3: incomingAulas[3] || incomingAulas["3"] || existingAulas[3] || 'Não iniciou',
+                4: incomingAulas[4] || incomingAulas["4"] || existingAulas[4] || 'Não iniciou',
+                5: incomingAulas[5] || incomingAulas["5"] || existingAulas[5] || 'Não iniciou'
               }
             };
           }
