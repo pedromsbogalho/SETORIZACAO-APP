@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { APIProvider, Map, AdvancedMarker, Pin, useMap } from '@vis.gl/react-google-maps';
 import { Maximize2, Minimize2, MapPin, AlertCircle, Loader2, Compass } from 'lucide-react';
 
@@ -340,7 +341,7 @@ export default function FamilyGoogleMap({ address, familyName, isDark }: FamilyG
       )}
 
       {/* Render the Fullscreen version directly to document.body via Portal */}
-      {isFullscreen && typeof document !== 'undefined' && require('react-dom').createPortal(
+      {isFullscreen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 md:p-10 animate-fade-in">
           <div className={`w-full h-full max-w-6xl bg-white dark:bg-zinc-950 rounded-2xl shadow-2xl border flex flex-col p-4 md:p-6 space-y-4 ${
             isDark ? 'border-zinc-800' : 'border-slate-200'
