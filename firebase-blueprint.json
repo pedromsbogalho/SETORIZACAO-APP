@@ -58,17 +58,17 @@
     }
   },
   "firestore": {
-    "/people/{personId}": {
+    "/users/{userId}/people/{personId}": {
       "schema": "Person",
-      "description": "Collection of all members and frequenters"
+      "description": "Collection of members and frequenters belonging to a specific user"
     },
-    "/families/{familyId}": {
+    "/users/{userId}/families/{familyId}": {
       "schema": "Family",
-      "description": "Collection of all family records"
+      "description": "Collection of family records belonging to a specific user"
     },
-    "/structures/{structureId}": {
+    "/users/{userId}/structures/{structureId}": {
       "schema": "Structure",
-      "description": "Johrei Center pastoral and supporting staff structures"
+      "description": "Johrei Center pastoral and supporting staff structures belonging to a specific user"
     }
   }
 }

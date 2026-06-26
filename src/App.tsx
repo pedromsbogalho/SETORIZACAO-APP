@@ -18,12 +18,16 @@ import ReportsView from './components/ReportsView';
 import StructureView from './components/StructureView';
 import { parseCSV, generateSampleCSVString } from './utils/csvParser';
 import {
+  auth,
+  logoutUser,
   fetchPeopleFromFirebase,
   savePeopleBatchToFirebase,
   fetchStructureFromFirebase,
   saveStructureToFirebase,
   clearAllFirebaseData
 } from './utils/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import AuthView from './components/AuthView';
 
 // Icons
 import { 
@@ -69,8 +73,12 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole>('ADMIN');
   const [currentAMName, setCurrentAMName] = useState<string>('PROF DANI');
 
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+
   // Loading state for Firebase
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Core Data states
   const [people, setPeople] = useState<Person[]>([]);
@@ -161,71 +169,75 @@ export default function App() {
     });
   };
 
-  // Load from Firebase on application start
+  // Load from Firebase on application start depending on authentication
   useEffect(() => {
-
-
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const fbPeople = await fetchPeopleFromFirebase();
-        const fbStructure = await fetchStructureFromFirebase();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        setIsLoading(true);
+        try {
+          const fbPeople = await fetchPeopleFromFirebase(user.uid);
+          const fbStructure = await fetchStructureFromFirebase(user.uid);
         
-        if (fbPeople && fbPeople.length > 0) {
-          const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
-          setPeople(cleanPeople);
-          localStorage.setItem('jc_people', JSON.stringify(cleanPeople));
-        } else {
-          // If Firebase is empty, check if we have LocalStorage cached data to migrate
-          const cachedPeople = localStorage.getItem('jc_people');
-          if (cachedPeople) {
-            const parsed = JSON.parse(cachedPeople);
-            if (parsed.length > 0) {
-              const cleanPeople = cleanAndDeDuplicatePeople(parsed);
-              setPeople(cleanPeople);
-              // Migrate to Firebase asynchronously to keep app ready
-              savePeopleBatchToFirebase(cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
-            }
+          if (fbPeople && fbPeople.length > 0) {
+            const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
+            setPeople(cleanPeople);
+            localStorage.setItem(`jc_people_${user.uid}`, JSON.stringify(cleanPeople));
           } else {
-            setPeople([]);
+            // Check for previous cache migration
+            const cachedPeople = localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+            if (cachedPeople) {
+              const parsed = JSON.parse(cachedPeople);
+              if (parsed.length > 0) {
+                const cleanPeople = cleanAndDeDuplicatePeople(parsed);
+                setPeople(cleanPeople);
+                savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
+              }
+            } else {
+              setPeople([]);
+            }
           }
-        }
 
-        if (fbStructure) {
-          setStructure(fbStructure);
-          localStorage.setItem('jc_structure', JSON.stringify(fbStructure));
-        } else {
-          // If structure is not in Firebase, check LocalStorage
-          const cachedStructure = localStorage.getItem('jc_structure');
+          if (fbStructure) {
+            setStructure(fbStructure);
+            localStorage.setItem(`jc_structure_${user.uid}`, JSON.stringify(fbStructure));
+          } else {
+            const cachedStructure = localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+            if (cachedStructure) {
+              const parsed = JSON.parse(cachedStructure);
+              setStructure(parsed);
+              saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+            } else {
+              setStructure(DEFAULT_STRUCTURE);
+              saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load user database, falling back to LocalStorage:", error);
+          const cachedPeople = localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+          const cachedStructure = localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+          if (cachedPeople) {
+            setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
+          }
           if (cachedStructure) {
-            const parsed = JSON.parse(cachedStructure);
-            setStructure(parsed);
-            saveStructureToFirebase(parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+            setStructure(JSON.parse(cachedStructure));
           } else {
             setStructure(DEFAULT_STRUCTURE);
-            saveStructureToFirebase(DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
           }
+        } finally {
+          setIsLoading(false);
+          setAuthLoading(false);
         }
-      } catch (error) {
-        console.error("Failed to load database from Firebase, falling back to LocalStorage:", error);
-        // Fallback to LocalStorage
-        const cachedPeople = localStorage.getItem('jc_people');
-        const cachedStructure = localStorage.getItem('jc_structure');
-        if (cachedPeople) {
-          const parsed = JSON.parse(cachedPeople);
-          setPeople(cleanAndDeDuplicatePeople(parsed));
-        }
-        if (cachedStructure) {
-          setStructure(JSON.parse(cachedStructure));
-        } else {
-          setStructure(DEFAULT_STRUCTURE);
-        }
-      } finally {
+      } else {
+        setCurrentUser(null);
+        setPeople([]);
+        setStructure(DEFAULT_STRUCTURE);
+        setAuthLoading(false);
         setIsLoading(false);
       }
-    }
+    });
 
-    loadData();
+    return () => unsubscribe();
   }, []);
 
   // Compute families dynamically whenever the people list changes
@@ -292,28 +304,26 @@ export default function App() {
 
   // Sync to LocalStorage & Firebase
   const handleUpdatePeople = async (newPeople: Person[]) => {
+    if (!currentUser) return;
     const enriched = enrichPeopleWithFamilyIds(newPeople);
     setPeople(enriched);
-    localStorage.setItem('jc_people', JSON.stringify(enriched));
+    localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
     try {
-      await savePeopleBatchToFirebase(enriched);
+      await savePeopleBatchToFirebase(currentUser.uid, enriched);
     } catch (err) {
       console.error("Error syncing updated people list to Firebase:", err);
     }
   };
 
   const handleUpdateFamilies = (newFamilies: Family[]) => {
-    // Families are now derived, but keep handle for backward compatibility
+    if (!currentUser) return;
     setFamilies(newFamilies);
-    localStorage.setItem('jc_families', JSON.stringify(newFamilies));
+    localStorage.setItem(`jc_families_${currentUser.uid}`, JSON.stringify(newFamilies));
   };
 
   const handleUpdateStructure = async (newStructure: JohreiCenterStructure) => {
+    if (!currentUser) return;
     // Atualiza structure e imediatamente re-normaliza o campo dos membros para refletir o organograma.
-    // Regra: 
-    // - se um AM existir na structure para o setor do membro (setor2), mantém `am`.
-    // - se não existir (responsável removido), limpa `am`.
-    // - setor2 fica preservado (como combinado pelo usuário).
     const nextPeople = people.map(p => {
       const setor = (p.setor2 || '').toUpperCase();
       const matchingAM = newStructure.amList.find(am => am.sector.toUpperCase() === setor);
@@ -329,32 +339,28 @@ export default function App() {
       };
     });
 
-    // Se algum membro tiver AM/AF vazio mas existe o responsável do setor, NÃO auto-preenche para evitar sobrescrita.
-
     const enriched = enrichPeopleWithFamilyIds(nextPeople);
     setPeople(enriched);
-    localStorage.setItem('jc_people', JSON.stringify(enriched));
+    localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
 
     setStructure(newStructure);
-    localStorage.setItem('jc_structure', JSON.stringify(newStructure));
+    localStorage.setItem(`jc_structure_${currentUser.uid}`, JSON.stringify(newStructure));
     try {
-      await savePeopleBatchToFirebase(enriched);
-      await saveStructureToFirebase(newStructure);
+      await savePeopleBatchToFirebase(currentUser.uid, enriched);
+      await saveStructureToFirebase(currentUser.uid, newStructure);
     } catch (err) {
       console.error("Error syncing updated structure/people to Firebase:", err);
     }
   };
 
-
-
-
   // Helper for quick load demo database
   const handleLoadDemoData = async () => {
+    if (!currentUser) return;
     const enriched = enrichPeopleWithFamilyIds(INITIAL_PEOPLE);
     setPeople(enriched);
-    localStorage.setItem('jc_people', JSON.stringify(enriched));
+    localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
     try {
-      await savePeopleBatchToFirebase(enriched);
+      await savePeopleBatchToFirebase(currentUser.uid, enriched);
       alert('Banco de dados de demonstração carregado e salvo no Firebase com sucesso!');
     } catch (err) {
       console.error("Error syncing demo data to Firebase:", err);
@@ -364,6 +370,7 @@ export default function App() {
 
   // Handle onboarding manual CSV import
   const handleOnboardingImport = async () => {
+    if (!currentUser) return;
     try {
       if (!onboardingCSV.trim()) {
         setOnboardingError('Cole ou faça o upload de um arquivo CSV válido.');
@@ -376,11 +383,11 @@ export default function App() {
       }
       const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
       setPeople(enriched);
-      localStorage.setItem('jc_people', JSON.stringify(enriched));
+      localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
       setOnboardingError('');
       setOnboardingCSV('');
       try {
-        await savePeopleBatchToFirebase(enriched);
+        await savePeopleBatchToFirebase(currentUser.uid, enriched);
         alert(`${enriched.length} registros cadastrados e salvos na nuvem com sucesso!`);
       } catch (err) {
         console.error("Error syncing imported CSV to Firebase:", err);
@@ -418,11 +425,11 @@ export default function App() {
             if (parsed.length > 0) {
               const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
               setPeople(enriched);
-              localStorage.setItem('jc_people', JSON.stringify(enriched));
+              localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
               setOnboardingError('');
               setOnboardingCSV('');
               try {
-                await savePeopleBatchToFirebase(enriched);
+                await savePeopleBatchToFirebase(currentUser.uid, enriched);
                 alert(`${enriched.length} registros importados e salvos na nuvem com sucesso via arrastar e soltar!`);
               } catch (err) {
                 console.error("Error syncing dropped CSV to Firebase:", err);
@@ -456,11 +463,11 @@ export default function App() {
         if (parsed.length > 0) {
           const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
           setPeople(enriched);
-          localStorage.setItem('jc_people', JSON.stringify(enriched));
+          localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
           setOnboardingError('');
           setOnboardingCSV('');
           try {
-            await savePeopleBatchToFirebase(enriched);
+            await savePeopleBatchToFirebase(currentUser.uid, enriched);
             alert(`${enriched.length} registros importados e salvos na nuvem com sucesso!`);
           } catch (err) {
             console.error("Error syncing uploaded CSV to Firebase:", err);
@@ -481,14 +488,15 @@ export default function App() {
   };
 
   const confirmResetDatabase = async () => {
+    if (!currentUser) return;
     setPeople([]);
-    localStorage.removeItem('jc_people');
+    localStorage.removeItem(`jc_people_${currentUser.uid}`);
     setOnboardingCSV('');
     setOnboardingError('');
     setShowResetModal(false);
     setActiveTab('dashboard');
     try {
-      await clearAllFirebaseData();
+      await clearAllFirebaseData(currentUser.uid);
       alert('Banco de dados excluído do Firebase e localmente com sucesso!');
     } catch (err) {
       console.error("Error clearing data from Firebase:", err);
@@ -524,14 +532,32 @@ export default function App() {
   const noPhoneCount = people.filter(p => !p.celularPrincipal).length;
   const totalAlerts = missingPostOutorgaCount + noWhatsCount + familiesSemAFCount + noSectorCount + noPhoneCount;
 
-  // Loading screen during Firebase connection/retrieval
-  if (isLoading) {
+  // Loading screen during Firebase Auth initialization
+  if (authLoading) {
     return (
-      <div className={`min-h-screen font-sans flex items-center justify-center p-4 transition-colors duration-300 ${isDark ? 'bg-[#09090c] text-zinc-100' : 'bg-[#f4f5f7] text-slate-800'}`}>
+      <div className="min-h-screen font-sans flex items-center justify-center p-4 bg-[#f4f5f7] text-slate-800">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm font-semibold tracking-wide">Conectando ao Firebase...</p>
-          <p className="text-xs text-zinc-400 font-mono">Sincronizando base de dados do Johrei Center</p>
+          <p className="text-sm font-semibold tracking-wide">Iniciando aplicação...</p>
+          <p className="text-xs text-zinc-400 font-mono">Autenticação do Johrei Center</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Guard: if not authenticated, render AuthView
+  if (!currentUser) {
+    return <AuthView onAuthSuccess={() => {}} />;
+  }
+
+  // Loading screen during User Private Database retrieval
+  if (isLoading) {
+    return (
+      <div className="min-h-screen font-sans flex items-center justify-center p-4 bg-[#f4f5f7] text-slate-800">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-semibold tracking-wide">Carregando seus dados...</p>
+          <p className="text-xs text-zinc-400 font-mono">Sincronizando com seu banco de dados privado</p>
         </div>
       </div>
     );
@@ -831,6 +857,35 @@ export default function App() {
                 )}
               </div>
             )}
+
+            {/* User profile / Logout */}
+            <div className={`p-2 rounded-lg text-xxs border ${isDark ? 'bg-zinc-950/40 border-zinc-850 text-zinc-300' : 'bg-slate-100/40 border-slate-200/50 text-slate-700'} backdrop-blur-xs`}>
+              <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 truncate">
+                  <div className="w-5 h-5 rounded-full bg-teal-600 flex items-center justify-center text-white text-[10px] font-bold uppercase">
+                    {currentUser?.displayName ? currentUser.displayName[0] : (currentUser?.email ? currentUser.email[0] : 'U')}
+                  </div>
+                  {!isSidebarCollapsed && (
+                    <div className="truncate">
+                      <span className="font-bold block truncate max-w-[120px]">
+                        {currentUser?.displayName || (currentUser?.email ? currentUser.email.split('@')[0] : 'Usuário')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    if (confirm('Deseja realmente sair?')) {
+                      await logoutUser();
+                    }
+                  }}
+                  className="p-1 rounded-md text-red-500 hover:bg-red-500/10 cursor-pointer"
+                  title="Sair da Conta"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
 
             {/* Completely Clear database button for full admin reset */}
             {!isSidebarCollapsed && userRole === 'ADMIN' && (

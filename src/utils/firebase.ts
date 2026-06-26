@@ -15,10 +15,20 @@ import {
   deleteDoc,
   getDocFromServer
 } from 'firebase/firestore';
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User
+} from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Person, Family, JohreiCenterStructure } from '../types';
 
-// Load config from environment variables (useful for production Vercel/Netlify/Github Pages) or fallback to local JSON config
+// Load config from environment variables (useful for production) or fallback to local JSON config
 const metaEnv = (import.meta as any).env || {};
 const apiKey = metaEnv.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey;
 const authDomain = metaEnv.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain;
@@ -39,8 +49,9 @@ const app = initializeApp({
   appId,
 });
 
-// We use a let-binding for db to allow fallback to the '(default)' database if the custom one is not found or fails
+// We use a let-binding for db to allow fallback to the '(default)' database
 export let db = getFirestore(app, firestoreDatabaseId || '(default)');
+export const auth = getAuth(app);
 
 // Helper function to enforce a timeout on asynchronous operations
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 2500): Promise<T> {
@@ -63,17 +74,26 @@ export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 2500): P
 // Test connection and auto-recovery to (default) database if custom db is not accessible
 async function testAndRecoverConnection() {
   try {
-    await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 1500);
+    // If user is unauthenticated, this might fail with permission-denied, which is normal and means we successfully reached Firestore!
+    await withTimeout(getDocFromServer(doc(db, 'test_connection_ping', 'ping')), 1500);
     console.log(`Firebase connection to database "${firestoreDatabaseId}" verified successfully!`);
   } catch (error: any) {
+    if (error?.code === 'permission-denied') {
+      console.log(`Firebase connection verified successfully (security rules active).`);
+      return;
+    }
     console.warn(`Connection to database "${firestoreDatabaseId}" failed:`, error);
     if (firestoreDatabaseId && firestoreDatabaseId !== '(default)') {
       console.log("Attempting to fall back to '(default)' database...");
       try {
         db = getFirestore(app, '(default)');
-        await withTimeout(getDocFromServer(doc(db, 'people', 'ping')), 1500);
+        await withTimeout(getDocFromServer(doc(db, 'test_connection_ping', 'ping')), 1500);
         console.log("Fallback to '(default)' database succeeded!");
-      } catch (fallbackError) {
+      } catch (fallbackError: any) {
+        if (fallbackError?.code === 'permission-denied') {
+          console.log("Fallback to '(default)' database succeeded (security rules active)!");
+          return;
+        }
         console.error("Fallback to '(default)' database also failed:", fallbackError);
       }
     }
@@ -81,161 +101,258 @@ async function testAndRecoverConnection() {
 }
 testAndRecoverConnection();
 
-// --- PEOPLE API ---
+// --- ERROR HANDLING SPECIFICATION (Section 3 of Skill) ---
 
-export async function fetchPeopleFromFirebase(): Promise<Person[]> {
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// --- AUTHENTICATION HELPERS ---
+
+export function mapUsernameToEmail(username: string): string {
+  // Clean username and format as dummy domain email
+  const sanitized = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+  return `${sanitized}@jornadajc.app.local`;
+}
+
+export async function signInWithGoogle(): Promise<User> {
+  const provider = new GoogleAuthProvider();
   try {
-    // Wrap with a timeout to fail fast and fall back to local storage instead of hanging forever
-    const querySnapshot = await withTimeout(getDocs(collection(db, 'people')), 2500);
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (err) {
+    console.error("Error signing in with Google:", err);
+    throw err;
+  }
+}
+
+export async function registerWithUsernameAndPassword(username: string, password: string): Promise<User> {
+  const email = mapUsernameToEmail(username);
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (err) {
+    console.error("Error registering with username/password:", err);
+    throw err;
+  }
+}
+
+export async function signInWithUsernameAndPassword(username: string, password: string): Promise<User> {
+  const email = mapUsernameToEmail(username);
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (err) {
+    console.error("Error signing in with username/password:", err);
+    throw err;
+  }
+}
+
+export async function logoutUser(): Promise<void> {
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.error("Error signing out:", err);
+    throw err;
+  }
+}
+
+// --- PEOPLE API (USER-SCOPED) ---
+
+export async function fetchPeopleFromFirebase(userId: string): Promise<Person[]> {
+  const path = `users/${userId}/people`;
+  try {
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'users', userId, 'people')), 2500);
     const list: Person[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Person);
     });
     return list;
   } catch (err) {
-    console.error("Error fetching people from Firebase:", err);
-    throw err;
+    handleFirestoreError(err, OperationType.GET, path);
+    return []; // Never reached as handleFirestoreError throws, but satisfies TS
   }
 }
 
-export async function savePersonToFirebase(person: Person): Promise<void> {
+export async function savePersonToFirebase(userId: string, person: Person): Promise<void> {
+  const path = `users/${userId}/people/${person.id}`;
   try {
-    await setDoc(doc(db, 'people', person.id), person);
+    await setDoc(doc(db, 'users', userId, 'people', person.id), person);
   } catch (err) {
-    console.error(`Error saving person ${person.id} to Firebase:`, err);
-    throw err;
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
-export async function deletePersonFromFirebase(id: string): Promise<void> {
+export async function deletePersonFromFirebase(userId: string, id: string): Promise<void> {
+  const path = `users/${userId}/people/${id}`;
   try {
-    await deleteDoc(doc(db, 'people', id));
+    await deleteDoc(doc(db, 'users', userId, 'people', id));
   } catch (err) {
-    console.error(`Error deleting person ${id} from Firebase:`, err);
-    throw err;
+    handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
-export async function savePeopleBatchToFirebase(peopleList: Person[]): Promise<void> {
+export async function savePeopleBatchToFirebase(userId: string, peopleList: Person[]): Promise<void> {
+  const basePath = `users/${userId}/people`;
   try {
-    // Firestore batch limits writes to 500 per batch. We chunk the list into chunks of 450 to be safe.
     const CHUNK_SIZE = 450;
     for (let i = 0; i < peopleList.length; i += CHUNK_SIZE) {
       const chunk = peopleList.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       chunk.forEach(p => {
-        const ref = doc(db, 'people', p.id);
+        const ref = doc(db, 'users', userId, 'people', p.id);
         batch.set(ref, p);
       });
       await batch.commit();
     }
   } catch (err) {
-    console.error("Error saving batch of people to Firebase:", err);
-    throw err;
+    handleFirestoreError(err, OperationType.WRITE, basePath);
   }
 }
 
-// --- FAMILIES API ---
+// --- FAMILIES API (USER-SCOPED, though derived dynamically, kept for backward compatibility) ---
 
-export async function fetchFamiliesFromFirebase(): Promise<Family[]> {
+export async function fetchFamiliesFromFirebase(userId: string): Promise<Family[]> {
+  const path = `users/${userId}/families`;
   try {
-    const querySnapshot = await withTimeout(getDocs(collection(db, 'families')), 2500);
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'users', userId, 'families')), 2500);
     const list: Family[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Family);
     });
     return list;
   } catch (err) {
-    console.error("Error fetching families from Firebase:", err);
-    throw err;
+    handleFirestoreError(err, OperationType.GET, path);
+    return [];
   }
 }
 
-export async function saveFamilyToFirebase(family: Family): Promise<void> {
+export async function saveFamilyToFirebase(userId: string, family: Family): Promise<void> {
+  const path = `users/${userId}/families/${family.id}`;
   try {
-    await setDoc(doc(db, 'families', family.id), family);
+    await setDoc(doc(db, 'users', userId, 'families', family.id), family);
   } catch (err) {
-    console.error(`Error saving family ${family.id} to Firebase:`, err);
-    throw err;
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
-export async function saveFamiliesBatchToFirebase(familiesList: Family[]): Promise<void> {
+export async function saveFamiliesBatchToFirebase(userId: string, familiesList: Family[]): Promise<void> {
+  const basePath = `users/${userId}/families`;
   try {
     const CHUNK_SIZE = 450;
     for (let i = 0; i < familiesList.length; i += CHUNK_SIZE) {
       const chunk = familiesList.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       chunk.forEach(f => {
-        const ref = doc(db, 'families', f.id);
+        const ref = doc(db, 'users', userId, 'families', f.id);
         batch.set(ref, f);
       });
       await batch.commit();
     }
   } catch (err) {
-    console.error("Error saving batch of families to Firebase:", err);
-    throw err;
+    handleFirestoreError(err, OperationType.WRITE, basePath);
   }
 }
 
-export async function deleteFamilyFromFirebase(id: string): Promise<void> {
+export async function deleteFamilyFromFirebase(userId: string, id: string): Promise<void> {
+  const path = `users/${userId}/families/${id}`;
   try {
-    await deleteDoc(doc(db, 'families', id));
+    await deleteDoc(doc(db, 'users', userId, 'families', id));
   } catch (err) {
-    console.error(`Error deleting family ${id} from Firebase:`, err);
-    throw err;
+    handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
-// --- STRUCTURE API ---
+// --- STRUCTURE API (USER-SCOPED) ---
 
 const STRUCTURE_DOC_ID = 'current_structure';
 
-export async function fetchStructureFromFirebase(): Promise<JohreiCenterStructure | null> {
+export async function fetchStructureFromFirebase(userId: string): Promise<JohreiCenterStructure | null> {
+  const path = `users/${userId}/structures/${STRUCTURE_DOC_ID}`;
   try {
-    const docSnap = await withTimeout(getDoc(doc(db, 'structures', STRUCTURE_DOC_ID)), 2500);
+    const docSnap = await withTimeout(getDoc(doc(db, 'users', userId, 'structures', STRUCTURE_DOC_ID)), 2500);
     if (docSnap.exists()) {
       return docSnap.data() as JohreiCenterStructure;
     }
     return null;
   } catch (err) {
-    console.error("Error fetching structure from Firebase:", err);
+    handleFirestoreError(err, OperationType.GET, path);
     return null;
   }
 }
 
-export async function saveStructureToFirebase(structure: JohreiCenterStructure): Promise<void> {
+export async function saveStructureToFirebase(userId: string, structure: JohreiCenterStructure): Promise<void> {
+  const path = `users/${userId}/structures/${STRUCTURE_DOC_ID}`;
   try {
-    await setDoc(doc(db, 'structures', STRUCTURE_DOC_ID), structure);
+    await setDoc(doc(db, 'users', userId, 'structures', STRUCTURE_DOC_ID), structure);
   } catch (err) {
-    console.error("Error saving structure to Firebase:", err);
-    throw err;
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
-// --- RESET ALL DATA API ---
+// --- RESET ALL DATA API (USER-SCOPED) ---
 
-export async function clearAllFirebaseData(): Promise<void> {
+export async function clearAllFirebaseData(userId: string): Promise<void> {
   try {
-    // Note: client side clear of full collections is usually done by reading and deleting.
-    // Since our DB size is small, we query and delete.
-    const peopleSnap = await getDocs(collection(db, 'people'));
+    const peopleSnap = await getDocs(collection(db, 'users', userId, 'people'));
     const peopleBatch = writeBatch(db);
     peopleSnap.forEach(d => {
-      peopleBatch.delete(doc(db, 'people', d.id));
+      peopleBatch.delete(doc(db, 'users', userId, 'people', d.id));
     });
     await peopleBatch.commit();
 
-    const familiesSnap = await getDocs(collection(db, 'families'));
+    const familiesSnap = await getDocs(collection(db, 'users', userId, 'families'));
     const familiesBatch = writeBatch(db);
     familiesSnap.forEach(d => {
-      familiesBatch.delete(doc(db, 'families', d.id));
+      familiesBatch.delete(doc(db, 'users', userId, 'families', d.id));
     });
     await familiesBatch.commit();
 
-    await deleteDoc(doc(db, 'structures', STRUCTURE_DOC_ID));
+    await deleteDoc(doc(db, 'users', userId, 'structures', STRUCTURE_DOC_ID));
   } catch (err) {
-    console.error("Error clearing data from Firebase:", err);
-    throw err;
+    handleFirestoreError(err, OperationType.DELETE, `users/${userId}`);
   }
 }
