@@ -182,10 +182,10 @@ export default function App() {
           if (fbPeople && fbPeople.length > 0) {
             const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
             setPeople(cleanPeople);
-            localStorage.setItem(`jc_people_${user.uid}`, JSON.stringify(cleanPeople));
+            localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
           } else {
             // Check for previous cache migration
-            const cachedPeople = localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+            const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
             if (cachedPeople) {
               const parsed = JSON.parse(cachedPeople);
               if (parsed.length > 0) {
@@ -200,9 +200,9 @@ export default function App() {
 
           if (fbStructure) {
             setStructure(fbStructure);
-            localStorage.setItem(`jc_structure_${user.uid}`, JSON.stringify(fbStructure));
+            localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
           } else {
-            const cachedStructure = localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+            const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
             if (cachedStructure) {
               const parsed = JSON.parse(cachedStructure);
               setStructure(parsed);
@@ -214,8 +214,8 @@ export default function App() {
           }
         } catch (error) {
           console.error("Failed to load user database, falling back to LocalStorage:", error);
-          const cachedPeople = localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-          const cachedStructure = localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+          const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+          const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
           if (cachedPeople) {
             setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
           }
@@ -307,7 +307,7 @@ export default function App() {
     if (!currentUser) return;
     const enriched = enrichPeopleWithFamilyIds(newPeople);
     setPeople(enriched);
-    localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
+    localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
     try {
       await savePeopleBatchToFirebase(currentUser.uid, enriched);
     } catch (err) {
@@ -318,7 +318,7 @@ export default function App() {
   const handleUpdateFamilies = (newFamilies: Family[]) => {
     if (!currentUser) return;
     setFamilies(newFamilies);
-    localStorage.setItem(`jc_families_${currentUser.uid}`, JSON.stringify(newFamilies));
+    localStorage.setItem('jc_families_shared', JSON.stringify(newFamilies));
   };
 
   const handleUpdateStructure = async (newStructure: JohreiCenterStructure) => {
@@ -341,10 +341,10 @@ export default function App() {
 
     const enriched = enrichPeopleWithFamilyIds(nextPeople);
     setPeople(enriched);
-    localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
+    localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
 
     setStructure(newStructure);
-    localStorage.setItem(`jc_structure_${currentUser.uid}`, JSON.stringify(newStructure));
+    localStorage.setItem('jc_structure_shared', JSON.stringify(newStructure));
     try {
       await savePeopleBatchToFirebase(currentUser.uid, enriched);
       await saveStructureToFirebase(currentUser.uid, newStructure);
@@ -358,7 +358,7 @@ export default function App() {
     if (!currentUser) return;
     const enriched = enrichPeopleWithFamilyIds(INITIAL_PEOPLE);
     setPeople(enriched);
-    localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
+    localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
     try {
       await savePeopleBatchToFirebase(currentUser.uid, enriched);
       alert('Banco de dados de demonstração carregado e salvo no Firebase com sucesso!');
@@ -383,7 +383,7 @@ export default function App() {
       }
       const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
       setPeople(enriched);
-      localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
+      localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
       setOnboardingError('');
       setOnboardingCSV('');
       try {
@@ -828,36 +828,6 @@ export default function App() {
 
           {/* Footer controls (Theme & Role switchers) */}
           <div className="p-3 border-t border-slate-200/40 dark:border-white/5 space-y-2">
-            {/* Profile access switcher */}
-
-            {!isSidebarCollapsed && (
-              <div className={`p-2.5 rounded-lg text-xxs ${isDark ? 'bg-zinc-950/40' : 'bg-slate-100/40'} border ${isDark ? 'border-zinc-850' : 'border-slate-200/50'} backdrop-blur-xs`}>
-                <div className="flex items-center gap-1 mb-1 text-zinc-400 font-mono uppercase truncate">
-                  <Shield className="w-3.5 h-3.5 flex-shrink-0 text-zinc-400" />
-                  Perfil de Acesso
-                </div>
-                <select 
-                  id="role-switcher"
-                  value={userRole}
-                  onChange={(e) => {
-                    setUserRole(e.target.value as UserRole);
-                    setActiveTab('dashboard');
-                  }}
-                  className={`w-full bg-transparent border-none outline-none font-bold text-xxs p-0.5 rounded cursor-pointer ${
-                    isDark ? 'text-zinc-200' : 'text-zinc-800'
-                  }`}
-                >
-                  <option value="ADMIN" className={isDark ? 'bg-zinc-900 text-zinc-200' : 'bg-white text-zinc-700'}>Admin (Total)</option>
-                  <option value="AM" className={isDark ? 'bg-zinc-900 text-zinc-200' : 'bg-white text-zinc-700'}>AM (Filtro)</option>
-                </select>
-                {userRole === 'AM' && (
-                  <div className="mt-1 text-[8px] text-zinc-400 italic truncate font-mono">
-                    AM: PROF DANI
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* User profile / Logout */}
             <div className={`p-2 rounded-lg text-xxs border ${isDark ? 'bg-zinc-950/40 border-zinc-850 text-zinc-300' : 'bg-slate-100/40 border-slate-200/50 text-slate-700'} backdrop-blur-xs`}>
               <div className="flex items-center justify-between gap-1.5">

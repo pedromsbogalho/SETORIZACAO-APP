@@ -200,12 +200,12 @@ export async function logoutUser(): Promise<void> {
   }
 }
 
-// --- PEOPLE API (USER-SCOPED) ---
+// --- PEOPLE API (SHARED) ---
 
 export async function fetchPeopleFromFirebase(userId: string): Promise<Person[]> {
-  const path = `users/${userId}/people`;
+  const path = `people`;
   try {
-    const querySnapshot = await withTimeout(getDocs(collection(db, 'users', userId, 'people')), 2500);
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'people')), 2500);
     const list: Person[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Person);
@@ -218,32 +218,32 @@ export async function fetchPeopleFromFirebase(userId: string): Promise<Person[]>
 }
 
 export async function savePersonToFirebase(userId: string, person: Person): Promise<void> {
-  const path = `users/${userId}/people/${person.id}`;
+  const path = `people/${person.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'people', person.id), person);
+    await setDoc(doc(db, 'people', person.id), person);
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
 export async function deletePersonFromFirebase(userId: string, id: string): Promise<void> {
-  const path = `users/${userId}/people/${id}`;
+  const path = `people/${id}`;
   try {
-    await deleteDoc(doc(db, 'users', userId, 'people', id));
+    await deleteDoc(doc(db, 'people', id));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
 export async function savePeopleBatchToFirebase(userId: string, peopleList: Person[]): Promise<void> {
-  const basePath = `users/${userId}/people`;
+  const basePath = `people`;
   try {
     const CHUNK_SIZE = 450;
     for (let i = 0; i < peopleList.length; i += CHUNK_SIZE) {
       const chunk = peopleList.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       chunk.forEach(p => {
-        const ref = doc(db, 'users', userId, 'people', p.id);
+        const ref = doc(db, 'people', p.id);
         batch.set(ref, p);
       });
       await batch.commit();
@@ -253,12 +253,12 @@ export async function savePeopleBatchToFirebase(userId: string, peopleList: Pers
   }
 }
 
-// --- FAMILIES API (USER-SCOPED, though derived dynamically, kept for backward compatibility) ---
+// --- FAMILIES API (SHARED, though derived dynamically, kept for backward compatibility) ---
 
 export async function fetchFamiliesFromFirebase(userId: string): Promise<Family[]> {
-  const path = `users/${userId}/families`;
+  const path = `families`;
   try {
-    const querySnapshot = await withTimeout(getDocs(collection(db, 'users', userId, 'families')), 2500);
+    const querySnapshot = await withTimeout(getDocs(collection(db, 'families')), 2500);
     const list: Family[] = [];
     querySnapshot.forEach((document) => {
       list.push(document.data() as Family);
@@ -271,23 +271,23 @@ export async function fetchFamiliesFromFirebase(userId: string): Promise<Family[
 }
 
 export async function saveFamilyToFirebase(userId: string, family: Family): Promise<void> {
-  const path = `users/${userId}/families/${family.id}`;
+  const path = `families/${family.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'families', family.id), family);
+    await setDoc(doc(db, 'families', family.id), family);
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
 export async function saveFamiliesBatchToFirebase(userId: string, familiesList: Family[]): Promise<void> {
-  const basePath = `users/${userId}/families`;
+  const basePath = `families`;
   try {
     const CHUNK_SIZE = 450;
     for (let i = 0; i < familiesList.length; i += CHUNK_SIZE) {
       const chunk = familiesList.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       chunk.forEach(f => {
-        const ref = doc(db, 'users', userId, 'families', f.id);
+        const ref = doc(db, 'families', f.id);
         batch.set(ref, f);
       });
       await batch.commit();
@@ -298,22 +298,22 @@ export async function saveFamiliesBatchToFirebase(userId: string, familiesList: 
 }
 
 export async function deleteFamilyFromFirebase(userId: string, id: string): Promise<void> {
-  const path = `users/${userId}/families/${id}`;
+  const path = `families/${id}`;
   try {
-    await deleteDoc(doc(db, 'users', userId, 'families', id));
+    await deleteDoc(doc(db, 'families', id));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
-// --- STRUCTURE API (USER-SCOPED) ---
+// --- STRUCTURE API (SHARED) ---
 
 const STRUCTURE_DOC_ID = 'current_structure';
 
 export async function fetchStructureFromFirebase(userId: string): Promise<JohreiCenterStructure | null> {
-  const path = `users/${userId}/structures/${STRUCTURE_DOC_ID}`;
+  const path = `structures/${STRUCTURE_DOC_ID}`;
   try {
-    const docSnap = await withTimeout(getDoc(doc(db, 'users', userId, 'structures', STRUCTURE_DOC_ID)), 2500);
+    const docSnap = await withTimeout(getDoc(doc(db, 'structures', STRUCTURE_DOC_ID)), 2500);
     if (docSnap.exists()) {
       return docSnap.data() as JohreiCenterStructure;
     }
@@ -325,34 +325,34 @@ export async function fetchStructureFromFirebase(userId: string): Promise<Johrei
 }
 
 export async function saveStructureToFirebase(userId: string, structure: JohreiCenterStructure): Promise<void> {
-  const path = `users/${userId}/structures/${STRUCTURE_DOC_ID}`;
+  const path = `structures/${STRUCTURE_DOC_ID}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'structures', STRUCTURE_DOC_ID), structure);
+    await setDoc(doc(db, 'structures', STRUCTURE_DOC_ID), structure);
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
-// --- RESET ALL DATA API (USER-SCOPED) ---
+// --- RESET ALL DATA API (SHARED) ---
 
 export async function clearAllFirebaseData(userId: string): Promise<void> {
   try {
-    const peopleSnap = await getDocs(collection(db, 'users', userId, 'people'));
+    const peopleSnap = await getDocs(collection(db, 'people'));
     const peopleBatch = writeBatch(db);
     peopleSnap.forEach(d => {
-      peopleBatch.delete(doc(db, 'users', userId, 'people', d.id));
+      peopleBatch.delete(doc(db, 'people', d.id));
     });
     await peopleBatch.commit();
 
-    const familiesSnap = await getDocs(collection(db, 'users', userId, 'families'));
+    const familiesSnap = await getDocs(collection(db, 'families'));
     const familiesBatch = writeBatch(db);
     familiesSnap.forEach(d => {
-      familiesBatch.delete(doc(db, 'users', userId, 'families', d.id));
+      familiesBatch.delete(doc(db, 'families', d.id));
     });
     await familiesBatch.commit();
 
-    await deleteDoc(doc(db, 'users', userId, 'structures', STRUCTURE_DOC_ID));
+    await deleteDoc(doc(db, 'structures', STRUCTURE_DOC_ID));
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `users/${userId}`);
+    handleFirestoreError(err, OperationType.DELETE, `shared_data`);
   }
 }
