@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Person } from '../types';
-import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle, Clock } from 'lucide-react';
+import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle, Clock, ArrowUpDown } from 'lucide-react';
 
 interface CoursesViewProps {
   people: Person[];
@@ -19,6 +19,8 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [memberTimeFilter, setMemberTimeFilter] = useState<'all' | 'recent' | '1-3' | '3plus' | 'none'>('all');
   const [selectedPosOutorgaSectors, setSelectedPosOutorgaSectors] = useState<string[]>([]);
+  const [posOutorgaSortField, setPosOutorgaSortField] = useState<'nome' | 'progresso' | 'dataOutorga'>('nome');
+  const [posOutorgaSortOrder, setPosOutorgaSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Extract unique sectors list
   const sectorsList = Array.from(new Set(people.map(p => p.setor2 || 'SEM SETOR').filter(Boolean)));
@@ -133,6 +135,56 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
 
     return list;
   }, [filteredPeople, memberTimeFilter, selectedPosOutorgaSectors]);
+
+  const sortedPosOutorgaFiltered = useMemo(() => {
+    const list = [...posOutorgaFiltered];
+    return list.sort((a, b) => {
+      if (posOutorgaSortField === 'nome') {
+        const comparison = a.nome.localeCompare(b.nome, 'pt-BR');
+        return posOutorgaSortOrder === 'asc' ? comparison : -comparison;
+      } else if (posOutorgaSortField === 'dataOutorga') {
+        const parseDateVal = (dateStr: string | undefined | null): number => {
+          if (!dateStr) return 0;
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const date = new Date(year, month, day);
+            if (!isNaN(date.getTime())) {
+              return date.getTime();
+            }
+          }
+          const parsed = Date.parse(dateStr);
+          if (!isNaN(parsed)) return parsed;
+          return 0;
+        };
+        const dateA = parseDateVal(a.dataOutorga);
+        const dateB = parseDateVal(b.dataOutorga);
+        if (dateA !== dateB) {
+          return posOutorgaSortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        return a.nome.localeCompare(b.nome, 'pt-BR');
+      } else {
+        const aCount = Object.values(a.cursoPosOutorga?.aulas || {}).filter(v => v === 'Concluido' || v === 'Concluído').length;
+        const bCount = Object.values(b.cursoPosOutorga?.aulas || {}).filter(v => v === 'Concluido' || v === 'Concluído').length;
+        if (aCount !== bCount) {
+          return posOutorgaSortOrder === 'asc' ? aCount - bCount : bCount - aCount;
+        }
+        // Tie breaker: name
+        return a.nome.localeCompare(b.nome, 'pt-BR');
+      }
+    });
+  }, [posOutorgaFiltered, posOutorgaSortField, posOutorgaSortOrder]);
+
+  const handlePosOutorgaSort = (field: 'nome' | 'progresso' | 'dataOutorga') => {
+    if (posOutorgaSortField === field) {
+      setPosOutorgaSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setPosOutorgaSortField(field);
+      setPosOutorgaSortOrder('asc');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -432,8 +484,33 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className={`border-b border-slate-200/40 dark:border-white/5 font-mono text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-                  <th className="py-2.5 px-3">Membro Outorgado</th>
-                  <th className="py-2.5 px-3">Progresso</th>
+                  <th 
+                    className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                    onClick={() => handlePosOutorgaSort('nome')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Membro Outorgado
+                      <ArrowUpDown className={`w-3 h-3 ${posOutorgaSortField === 'nome' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-400'}`} />
+                    </div>
+                  </th>
+                  <th 
+                    className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                    onClick={() => handlePosOutorgaSort('dataOutorga')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Data Outorga
+                      <ArrowUpDown className={`w-3 h-3 ${posOutorgaSortField === 'dataOutorga' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-400'}`} />
+                    </div>
+                  </th>
+                  <th 
+                    className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                    onClick={() => handlePosOutorgaSort('progresso')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Progresso
+                      <ArrowUpDown className={`w-3 h-3 ${posOutorgaSortField === 'progresso' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-400'}`} />
+                    </div>
+                  </th>
                   <th className="py-2.5 px-3 text-center">Aula 1</th>
                   <th className="py-2.5 px-3 text-center">Aula 2</th>
                   <th className="py-2.5 px-3 text-center">Aula 3</th>
@@ -442,7 +519,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {posOutorgaFiltered.map(p => {
+                {sortedPosOutorgaFiltered.map(p => {
                   const aulas = p.cursoPosOutorga.aulas;
                   const completedCount = Object.values(aulas).filter(v => v === 'Concluido' || v === 'Concluído').length;
                   const progressPercentage = completedCount * 20;
@@ -451,7 +528,14 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                     <tr key={p.id} className="hover:bg-slate-100/30 dark:hover:bg-zinc-850/20">
                       <td className="py-3 px-3 font-semibold text-zinc-900 dark:text-zinc-100">
                         {p.nome}
-                        <span className="block text-[10px] text-zinc-400 font-normal">Outorgado: {p.anoOutorga || 'N/A'} • Setor: {p.setor2 || 'N/A'}</span>
+                        <span className="block text-[10px] text-zinc-400 font-normal">
+                          {p.idade ? `${p.idade} anos` : 'N/A'} • Tempo de Membro: {p.tempoMembro || 'N/A'} • Setor: {p.setor2 || 'N/A'}
+                        </span>
+                      </td>
+                      
+                      {/* Data Outorga Column */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
+                        {p.dataOutorga || 'N/A'}
                       </td>
                       
                       {/* Progress gauge bar */}
@@ -476,9 +560,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                         const lessonStatus = aulas[lessonNum] || 'Não iniciou';
                         let btnStyle = 'bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 border border-zinc-200 dark:border-zinc-700';
                         if (lessonStatus === 'Concluido' || lessonStatus === 'Concluído') {
-                          btnStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs';
+                           btnStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs';
                         } else if (lessonStatus === 'Em andamento') {
-                          btnStyle = 'bg-orange-500 hover:bg-orange-600 text-white font-bold border border-orange-500 shadow-xs';
+                           btnStyle = 'bg-orange-500 hover:bg-orange-600 text-white font-bold border border-orange-500 shadow-xs';
                         }
 
                         return (
@@ -496,9 +580,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                     </tr>
                   );
                 })}
-                {posOutorgaFiltered.length === 0 && (
+                {sortedPosOutorgaFiltered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-zinc-400 italic">
+                    <td colSpan={8} className="py-8 text-center text-zinc-400 italic">
                       Nenhum membro outorgado encontrado para acompanhar o curso pós-outorga com os filtros aplicados.
                     </td>
                   </tr>

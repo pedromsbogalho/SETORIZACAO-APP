@@ -17,6 +17,7 @@ import PendenciesView from './components/PendenciesView';
 import ReportsView from './components/ReportsView';
 import StructureView from './components/StructureView';
 import UserApprovalsView from './components/UserApprovalsView';
+import AIBulkEditor from './components/AIBulkEditor';
 import { parseCSV, generateSampleCSVString } from './utils/csvParser';
 import {
   auth,
@@ -189,93 +190,148 @@ export default function App() {
       if (user) {
         setCurrentUser(user);
         setIsLoading(true);
+
+        // Define fallback profile immediately in case of timeout/offline
+        const isOwner = (user.email || '').toLowerCase().trim() === 'pedro.ms.bogalho@gmail.com';
+        const fallbackProfile: AppUser = {
+          uid: user.uid,
+          email: user.email || 'offline@jornadajc.app.local',
+          displayName: user.displayName || 'Usuário Offline',
+          role: isOwner ? 'ADMIN' : 'ASSISTANT',
+          approved: true, // Se falhar a conexão, permite acesso local/offline
+          requestDate: new Date().toISOString()
+        };
+
+        // Criamos um sinal/flag de controle para evitar corrida de estados
+        let initialized = false;
+
+        // Função de fallback para modo Local/Offline
+        const handleOfflineFallback = (reason: string) => {
+          if (initialized) return;
+          initialized = true;
+          console.warn(`[Firebase Offline Fallback] Using LocalStorage because: ${reason}`);
+
+          setCurrentAppUser(fallbackProfile);
+          setUserRole(fallbackProfile.role);
+
+          const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+          const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+
+          if (cachedPeople) {
+            setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
+          } else {
+            setPeople([]);
+          }
+
+          if (cachedStructure) {
+            setStructure(JSON.parse(cachedStructure));
+          } else {
+            setStructure(DEFAULT_STRUCTURE);
+          }
+
+          setIsLoading(false);
+          setAuthLoading(false);
+        };
+
+        // Limite de tempo de 3.5 segundos para conectar e autenticar no Firestore
+        const offlineTimeout = setTimeout(() => {
+          handleOfflineFallback("Firestore connection timeout (3.5s)");
+        }, 3500);
+
         try {
           // Garante que o documento de perfil no Firestore existe
           const userEmail = user.email || `${user.displayName?.toLowerCase().replace(/\s+/g, '') || 'usuario'}@jornadajc.app.local`;
           const initialProfile = await createAppUserOrGet(user.uid, userEmail, user.displayName || '');
-          setCurrentAppUser(initialProfile);
-          setUserRole(initialProfile.role);
 
-          // Escuta em tempo real as mudanças no perfil (ex: aprovação pelo administrador)
-          unsubscribeRealtime = onAppUserChangeRealtime(user.uid, async (latestAppUser) => {
-            if (latestAppUser) {
-              setCurrentAppUser(latestAppUser);
-              setUserRole(latestAppUser.role);
+          // Se o timeout ainda não disparou o fallback offline:
+          if (!initialized) {
+            setCurrentAppUser(initialProfile);
+            setUserRole(initialProfile.role);
 
-              if (latestAppUser.approved) {
-                // Se aprovado, carrega os dados compartilhados
-                setIsLoading(true);
-                try {
-                  const fbPeople = await fetchPeopleFromFirebase(user.uid);
-                  const fbStructure = await fetchStructureFromFirebase(user.uid);
-                
-                  if (fbPeople && fbPeople.length > 0) {
-                    const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
-                    setPeople(cleanPeople);
-                    localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
-                  } else {
-                    const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-                    if (cachedPeople) {
-                      const parsed = JSON.parse(cachedPeople);
-                      if (parsed.length > 0) {
-                        const cleanPeople = cleanAndDeDuplicatePeople(parsed);
-                        setPeople(cleanPeople);
-                        savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
-                      }
+            // Escuta em tempo real as mudanças no perfil (ex: aprovação pelo administrador)
+            unsubscribeRealtime = onAppUserChangeRealtime(user.uid, async (latestAppUser) => {
+              // Limpa o timeout de offline pois conseguimos conectar com sucesso!
+              clearTimeout(offlineTimeout);
+
+              if (latestAppUser) {
+                setCurrentAppUser(latestAppUser);
+                setUserRole(latestAppUser.role);
+
+                if (latestAppUser.approved) {
+                  // Se aprovado, carrega os dados compartilhados
+                  setIsLoading(true);
+                  try {
+                    const fbPeople = await fetchPeopleFromFirebase(user.uid);
+                    const fbStructure = await fetchStructureFromFirebase(user.uid);
+
+                    if (fbPeople && fbPeople.length > 0) {
+                      const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
+                      setPeople(cleanPeople);
+                      localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
                     } else {
-                      setPeople([]);
+                      const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+                      if (cachedPeople) {
+                        const parsed = JSON.parse(cachedPeople);
+                        if (parsed.length > 0) {
+                          const cleanPeople = cleanAndDeDuplicatePeople(parsed);
+                          setPeople(cleanPeople);
+                          savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
+                        }
+                      } else {
+                        setPeople([]);
+                      }
                     }
-                  }
 
-                  if (fbStructure) {
-                    setStructure(fbStructure);
-                    localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
-                  } else {
+                    if (fbStructure) {
+                      setStructure(fbStructure);
+                      localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
+                    } else {
+                      const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+                      if (cachedStructure) {
+                        const parsed = JSON.parse(cachedStructure);
+                        setStructure(parsed);
+                        saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+                      } else {
+                        setStructure(DEFAULT_STRUCTURE);
+                        saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+                      }
+                    }
+                  } catch (error) {
+                    console.error("Failed to load user database, falling back to LocalStorage:", error);
+                    const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
                     const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+                    if (cachedPeople) {
+                      setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
+                    }
                     if (cachedStructure) {
-                      const parsed = JSON.parse(cachedStructure);
-                      setStructure(parsed);
-                      saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+                      setStructure(JSON.parse(cachedStructure));
                     } else {
                       setStructure(DEFAULT_STRUCTURE);
-                      saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
                     }
+                  } finally {
+                    setIsLoading(false);
+                    setAuthLoading(false);
                   }
-                } catch (error) {
-                  console.error("Failed to load user database, falling back to LocalStorage:", error);
-                  const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-                  const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-                  if (cachedPeople) {
-                    setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
-                  }
-                  if (cachedStructure) {
-                    setStructure(JSON.parse(cachedStructure));
-                  } else {
-                    setStructure(DEFAULT_STRUCTURE);
-                  }
-                } finally {
+                } else {
+                  // Se não aprovado, limpa os dados em tela e aguarda aprovação
+                  setPeople([]);
+                  setStructure(DEFAULT_STRUCTURE);
                   setIsLoading(false);
                   setAuthLoading(false);
                 }
               } else {
-                // Se não aprovado, limpa os dados em tela e aguarda aprovação
+                setCurrentAppUser(null);
                 setPeople([]);
                 setStructure(DEFAULT_STRUCTURE);
                 setIsLoading(false);
                 setAuthLoading(false);
               }
-            } else {
-              setCurrentAppUser(null);
-              setPeople([]);
-              setStructure(DEFAULT_STRUCTURE);
-              setIsLoading(false);
-              setAuthLoading(false);
-            }
-          });
+            });
+          }
         } catch (error) {
+          clearTimeout(offlineTimeout);
           console.error("Error setting up user session:", error);
-          setIsLoading(false);
-          setAuthLoading(false);
+          handleOfflineFallback(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
       } else {
         setCurrentUser(null);
@@ -1164,6 +1220,14 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* AI Bulk Editor Floating Panel */}
+      <AIBulkEditor 
+        people={people} 
+        onUpdatePeople={handleUpdatePeople} 
+        activeTab={activeTab}
+        isDark={isDark}
+      />
     </div>
   );
 }
