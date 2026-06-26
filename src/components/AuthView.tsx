@@ -100,16 +100,15 @@ export default function AuthView({ onAuthSuccess }: AuthViewProps) {
               </span>
               <div>
                 <span className="font-semibold text-lg tracking-tight block font-display">Johrei Center</span>
-                <span className="text-[10px] text-zinc-400 font-mono tracking-wider">ACOMPANHAMENTO ESPIRITUAL</span>
               </div>
             </div>
 
             <div className="space-y-4 pt-4">
               <h1 className="text-3xl md:text-4xl font-sans font-bold tracking-tight leading-tight text-slate-900">
-                Seu Espaço Exclusivo de Gestão e Fé
+                Gerenciador de membros e acompanhamento de setores.
               </h1>
               <p className="text-sm text-slate-500 leading-relaxed">
-                Agora, cada membro ou responsável possui um ambiente totalmente individualizado e seguro. Seus dados, histórico de acompanhamento, árvore territorial e turmas de cursos estão isolados de forma autônoma na nuvem.
+                Sistema integrado para acompanhamento dos setores da unidade.
               </p>
             </div>
 
@@ -118,8 +117,7 @@ export default function AuthView({ onAuthSuccess }: AuthViewProps) {
               <div className="flex items-start gap-3 text-xs">
                 <div className="p-1 rounded-md bg-teal-500/10 text-teal-600 mt-0.5 font-bold">✓</div>
                 <div>
-                  <h4 className="font-semibold text-slate-800">Privacidade Absoluta</h4>
-                  <p className="text-xxs text-slate-400">Sua base de dados é unicamente sua, criptografada e protegida por regras rígidas de segurança do Firebase.</p>
+
                 </div>
               </div>
 
@@ -142,7 +140,6 @@ export default function AuthView({ onAuthSuccess }: AuthViewProps) {
           </div>
 
           <div className="pt-8 text-[11px] font-mono text-zinc-400 flex items-center justify-between">
-            <span>Unidade de Fé e Dedicação</span>
             <span>v2.0 - Autenticação Segura</span>
           </div>
         </div>
