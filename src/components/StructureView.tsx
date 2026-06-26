@@ -17,6 +17,17 @@ interface StructureViewProps {
 export default function StructureView({ structure, onUpdateStructure, people, isDark }: StructureViewProps) {
   // Tabs for subcategories of structure
   const [activeSubTab, setActiveSubTab] = useState<'am' | 'af' | 'assessores'>('am');
+  const [localStructure, setLocalStructure] = useState<JohreiCenterStructure>(structure);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Sync with structure prop changes from Firebase
+  useEffect(() => {
+    setLocalStructure(structure);
+  }, [structure]);
+
+  const hasChanges = useMemo(() => {
+    return JSON.stringify(localStructure) !== JSON.stringify(structure);
+  }, [localStructure, structure]);
 
   // Helper to compute stats for a given sector
   const getSectorStats = (sectorName: string) => {
@@ -237,19 +248,19 @@ export default function StructureView({ structure, onUpdateStructure, people, is
       sector: amSector.toUpperCase()
     };
 
-    onUpdateStructure({
-      ...structure,
-      amList: [...structure.amList, newAM]
-    });
+    setLocalStructure(prev => ({
+      ...prev,
+      amList: [...prev.amList, newAM]
+    }));
     setAmName('');
     setAmSearch('');
   };
 
   const handleDeleteAM = (id: string) => {
-    onUpdateStructure({
-      ...structure,
-      amList: structure.amList.filter(am => am.id !== id)
-    });
+    setLocalStructure(prev => ({
+      ...prev,
+      amList: prev.amList.filter(am => am.id !== id)
+    }));
   };
 
   const handleAddAF = (e: React.FormEvent) => {
@@ -265,19 +276,19 @@ export default function StructureView({ structure, onUpdateStructure, people, is
       sector: afSector.toUpperCase()
     };
 
-    onUpdateStructure({
-      ...structure,
-      afList: [...structure.afList, newAF]
-    });
+    setLocalStructure(prev => ({
+      ...prev,
+      afList: [...prev.afList, newAF]
+    }));
     setAfName('');
     setAfSearch('');
   };
 
   const handleDeleteAF = (id: string) => {
-    onUpdateStructure({
-      ...structure,
-      afList: structure.afList.filter(af => af.id !== id)
-    });
+    setLocalStructure(prev => ({
+      ...prev,
+      afList: prev.afList.filter(af => af.id !== id)
+    }));
   };
 
   const handleAddAssessor = (e: React.FormEvent) => {
@@ -293,19 +304,19 @@ export default function StructureView({ structure, onUpdateStructure, people, is
       role: assessorRole.trim()
     };
 
-    onUpdateStructure({
-      ...structure,
-      assessoresList: [...structure.assessoresList, newAssessor]
-    });
+    setLocalStructure(prev => ({
+      ...prev,
+      assessoresList: [...prev.assessoresList, newAssessor]
+    }));
     setAssessorName('');
     setAssessorSearch('');
   };
 
   const handleDeleteAssessor = (id: string) => {
-    onUpdateStructure({
-      ...structure,
-      assessoresList: structure.assessoresList.filter(as => as.id !== id)
-    });
+    setLocalStructure(prev => ({
+      ...prev,
+      assessoresList: prev.assessoresList.filter(as => as.id !== id)
+    }));
   };
 
   return (
@@ -317,6 +328,56 @@ export default function StructureView({ structure, onUpdateStructure, people, is
           Defina o organograma do Johrei Center. Assistentes de Ministro (AM), Assistentes de Família (AF) e Assessores. Toda a base se adequará automaticamente a esta hierarquia.
         </p>
       </div>
+
+      {/* Pending changes banner */}
+      {hasChanges && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-400 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 animate-fade-in shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 animate-pulse" />
+            <div className="text-xs">
+              <span className="font-bold block text-slate-900 dark:text-zinc-100 mb-0.5">Alterações Pendentes na Estrutura!</span>
+              <span>Você adicionou ou removeu membros. Para que essa alteração seja gravada no banco de dados na nuvem permanentemente, você precisa confirmar as mudanças.</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto self-stretch sm:self-auto">
+            <button
+              onClick={() => {
+                if (confirm('Tem certeza que deseja descartar suas alterações na estrutura?')) {
+                  setLocalStructure(structure);
+                }
+              }}
+              disabled={isSaving}
+              className="px-3 py-1.5 rounded-lg border border-amber-500/20 hover:bg-amber-500/5 text-xxs font-bold transition-all uppercase cursor-pointer flex-1 sm:flex-none text-center font-sans"
+            >
+              Descartar
+            </button>
+            <button
+              onClick={async () => {
+                setIsSaving(true);
+                try {
+                  await onUpdateStructure(localStructure);
+                } catch (err) {
+                  console.error("Erro ao salvar estrutura:", err);
+                  alert("Erro ao salvar estrutura no banco de dados.");
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              disabled={isSaving}
+              className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xxs font-bold transition-all uppercase cursor-pointer flex-1 sm:flex-none flex items-center justify-center gap-1.5 shadow-xs font-sans"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Gravando...
+                </>
+              ) : (
+                'Salvar Alterações'
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sub Tabs */}
       <div className="flex border-b border-slate-200/40 dark:border-white/5 gap-2 pb-px overflow-x-auto">
@@ -375,7 +436,7 @@ export default function StructureView({ structure, onUpdateStructure, people, is
                   </span>
                   <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto pr-1">
                     {amSuggestions.map(sug => {
-                      const isAdded = structure.amList.some(am => am.name.toUpperCase() === sug.name.toUpperCase());
+                      const isAdded = localStructure.amList.some(am => am.name.toUpperCase() === sug.name.toUpperCase());
                       return (
                         <button
                           key={sug.name}
@@ -502,7 +563,7 @@ export default function StructureView({ structure, onUpdateStructure, people, is
                   </span>
                   <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto pr-1">
                     {afSuggestions.map(sug => {
-                      const isAdded = structure.afList.some(af => af.name.toUpperCase() === sug.name.toUpperCase());
+                      const isAdded = localStructure.afList.some(af => af.name.toUpperCase() === sug.name.toUpperCase());
                       return (
                         <button
                           key={sug.name}
@@ -702,15 +763,15 @@ export default function StructureView({ structure, onUpdateStructure, people, is
         {/* List panel */}
         <div className="p-5 rounded-xl glass-panel shadow-sm space-y-4 md:col-span-2">
           <h3 className="text-sm font-sans font-bold text-slate-800 dark:text-zinc-200">
-            {activeSubTab === 'am' && `Assistentes de Ministro Cadastrados (${structure.amList.length})`}
-            {activeSubTab === 'af' && `Assistentes de Família Cadastrados (${structure.afList.length})`}
-            {activeSubTab === 'assessores' && `Assessores / Apoios Ativos (${structure.assessoresList.length})`}
+            {activeSubTab === 'am' && `Assistentes de Ministro Cadastrados (${localStructure.amList.length})`}
+            {activeSubTab === 'af' && `Assistentes de Família Cadastrados (${localStructure.afList.length})`}
+            {activeSubTab === 'assessores' && `Assessores / Apoios Ativos (${localStructure.assessoresList.length})`}
           </h3>
 
           <div className="max-h-[600px] overflow-y-auto pr-1">
             {activeSubTab === 'am' && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {structure.amList.map(am => {
+                {localStructure.amList.map(am => {
                   const stats = getSectorStats(am.sector);
                   return (
                     <div
@@ -805,7 +866,7 @@ export default function StructureView({ structure, onUpdateStructure, people, is
 
             {activeSubTab === 'af' && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {structure.afList.map(af => {
+                {localStructure.afList.map(af => {
                   const stats = getSectorStats(af.sector);
                   return (
                     <div
@@ -900,7 +961,7 @@ export default function StructureView({ structure, onUpdateStructure, people, is
 
             {activeSubTab === 'assessores' && (
               <div className="space-y-2">
-                {structure.assessoresList.map(ass => (
+                {localStructure.assessoresList.map(ass => (
                   <div
                     key={ass.id}
                     id={`card-assessor-${ass.id}`}
@@ -929,9 +990,9 @@ export default function StructureView({ structure, onUpdateStructure, people, is
               </div>
             )}
 
-            {((activeSubTab === 'am' && structure.amList.length === 0) ||
-              (activeSubTab === 'af' && structure.afList.length === 0) ||
-              (activeSubTab === 'assessores' && structure.assessoresList.length === 0)) && (
+            {((activeSubTab === 'am' && localStructure.amList.length === 0) ||
+              (activeSubTab === 'af' && localStructure.afList.length === 0) ||
+              (activeSubTab === 'assessores' && localStructure.assessoresList.length === 0)) && (
               <div className="text-center py-10 text-zinc-400 italic">
                 Nenhum registro cadastrado para esta categoria.
               </div>

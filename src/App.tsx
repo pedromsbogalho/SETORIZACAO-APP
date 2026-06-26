@@ -409,11 +409,22 @@ export default function App() {
 
     setStructure(newStructure);
     localStorage.setItem('jc_structure_shared', JSON.stringify(newStructure));
+
+    // Salva primeiro a estrutura (operação rápida e crítica)
+    try {
+      await saveStructureToFirebase(currentUser.uid, newStructure);
+      console.log("Estrutura salva com sucesso no Firebase.");
+    } catch (err) {
+      console.error("Erro ao sincronizar estrutura no Firebase:", err);
+      throw err; // Repassa para que a UI mostre erro se falhar
+    }
+
+    // Salva os membros em lote em segundo plano (pode ser lento)
     try {
       await savePeopleBatchToFirebase(currentUser.uid, enriched);
-      await saveStructureToFirebase(currentUser.uid, newStructure);
+      console.log("Membros atualizados sincronizados com sucesso no Firebase.");
     } catch (err) {
-      console.error("Error syncing updated structure/people to Firebase:", err);
+      console.error("Erro ao sincronizar membros re-normalizados no Firebase:", err);
     }
   };
 
