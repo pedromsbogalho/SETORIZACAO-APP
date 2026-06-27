@@ -40,7 +40,7 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
     switch (activeTab) {
       case 'courses':
         return [
-          { label: 'Outorgados pós-2024: Aula 1 e 2 concluída', text: 'Marque a Aula 1 e a Aula 2 como Concluído para todos os membros que foram outorgados em 2025 ou que tenham ano de outorga maior ou igual a 2025' },
+          { label: 'Outorgados pós-2024: Aula 1 e 2 concluída', text: 'Marque a Aula 1 e a Aula 2 como Concluído para todos os membros que foram outorgados in 2025 ou que tenham ano de outorga maior ou igual a 2025' },
           { label: 'Setor Sul: Aula 1 em andamento', text: 'Mude a Aula 1 para Em andamento para todos do setor SUL' }
         ];
       case 'people':
@@ -236,8 +236,6 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
       }
 
       setError(friendlyMsg);
-    } catch (e) {
-      // safe fallback
     } finally {
       setIsLoading(false);
     }
