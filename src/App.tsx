@@ -103,7 +103,6 @@ export default function App() {
   const onboardingFileRef = useRef<HTMLInputElement>(null);
 
   // Helper to dynamically link family IDs based on identical household addresses (person with oldest age is head)
-  // Respeita o idFamilia original da planilha quando já preenchido
   const enrichPeopleWithFamilyIds = (pList: Person[]): Person[] => {
     // De-duplicate people by ID to prevent key-uniqueness issues in React
     const seenIds = new Set<string>();
@@ -115,20 +114,39 @@ export default function App() {
       return true;
     });
 
+    const normalizeAddress = (addrStr: string): string => {
+      return (addrStr || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // remove accents
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, ' ') // replace non-alphanumeric with spaces
+        .replace(/\s+/g, ' ') // collapse multiple spaces
+        .trim();
+    };
+
     const groups: Record<string, Person[]> = {};
     
-    // Só agrupa por endereço pessoas que NÃO têm idFamilia original válido
+    // Group people strictly by normalized address
     uniqueList.forEach(p => {
-      // Se já tem um idFamilia válido (ex: FAM-444 vindo da planilha), preserva
-      if (p.idFamilia && /^FAM-/.test(p.idFamilia)) {
-        return;
-      }
-      const addr = (p.endCompleto || '').trim().toUpperCase();
-      if (addr && addr !== 'N/A' && addr !== 'SEM ENDEREÇO' && addr.length >= 5) {
-        if (!groups[addr]) {
-          groups[addr] = [];
+      const rawAddr = (p.endCompleto || '').trim();
+      const addrUpper = rawAddr.toUpperCase();
+      
+      if (
+        rawAddr && 
+        addrUpper !== 'N/A' && 
+        addrUpper !== 'SEM ENDERECO' && 
+        addrUpper !== 'SEM ENDEREÇO' && 
+        addrUpper !== 'ENDEREÇO NÃO INFORMADO' && 
+        addrUpper !== 'ENDERECO NAO INFORMADO' && 
+        rawAddr.length >= 5
+      ) {
+        const norm = normalizeAddress(rawAddr);
+        if (norm) {
+          if (!groups[norm]) {
+            groups[norm] = [];
+          }
+          groups[norm].push(p);
         }
-        groups[addr].push(p);
       }
     });
     
@@ -145,13 +163,20 @@ export default function App() {
     };
     
     return uniqueList.map(p => {
-      // Se já tem idFamilia válido, preserva
-      if (p.idFamilia && /^FAM-/.test(p.idFamilia)) {
-        return p;
-      }
-      const addr = (p.endCompleto || '').trim().toUpperCase();
-      if (addr && addr !== 'N/A' && addr !== 'SEM ENDEREÇO' && addr.length >= 5) {
-        const list = groups[addr];
+      const rawAddr = (p.endCompleto || '').trim();
+      const addrUpper = rawAddr.toUpperCase();
+      
+      if (
+        rawAddr && 
+        addrUpper !== 'N/A' && 
+        addrUpper !== 'SEM ENDERECO' && 
+        addrUpper !== 'SEM ENDEREÇO' && 
+        addrUpper !== 'ENDEREÇO NÃO INFORMADO' && 
+        addrUpper !== 'ENDERECO NAO INFORMADO' && 
+        rawAddr.length >= 5
+      ) {
+        const norm = normalizeAddress(rawAddr);
+        const list = groups[norm];
         if (list && list.length > 0) {
           const oldest = getOldest(list);
           return {
@@ -160,6 +185,8 @@ export default function App() {
           };
         }
       }
+      
+      // For people without a valid address, they belong to their own single-person family
       return {
         ...p,
         idFamilia: `FAM-${p.id}`
@@ -310,41 +337,41 @@ export default function App() {
                   // Se aprovado, carrega os dados compartilhados
                   setIsLoading(true);
                   try {
-                    const fbPeople = await fetchPeopleFromFirebase(user.uid);
-                    const fbStructure = await fetchStructureFromFirebase(user.uid);
+                     const fbPeople = await fetchPeopleFromFirebase(user.uid);
+                     const fbStructure = await fetchStructureFromFirebase(user.uid);
 
-                    if (fbPeople && fbPeople.length > 0) {
-                      const cleanPeople = cleanSanitizeAndEnrichPeople(fbPeople);
-                      setPeople(cleanPeople);
-                      localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
-                    } else {
-                      const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-                      if (cachedPeople) {
-                        const parsed = JSON.parse(cachedPeople);
-                        if (parsed.length > 0) {
-                          const cleanPeople = cleanSanitizeAndEnrichPeople(parsed);
-                          setPeople(cleanPeople);
-                          savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
-                        }
-                      } else {
-                        setPeople([]);
-                      }
-                    }
+                     if (fbPeople && fbPeople.length > 0) {
+                       const cleanPeople = cleanSanitizeAndEnrichPeople(fbPeople);
+                       setPeople(cleanPeople);
+                       localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
+                     } else {
+                       const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
+                       if (cachedPeople) {
+                         const parsed = JSON.parse(cachedPeople);
+                         if (parsed.length > 0) {
+                           const cleanPeople = cleanSanitizeAndEnrichPeople(parsed);
+                           setPeople(cleanPeople);
+                           savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
+                         }
+                       } else {
+                         setPeople([]);
+                       }
+                     }
 
-                    if (fbStructure) {
-                      setStructure(fbStructure);
-                      localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
-                    } else {
-                      const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-                      if (cachedStructure) {
-                        const parsed = JSON.parse(cachedStructure);
-                        setStructure(parsed);
-                        saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
-                      } else {
-                        setStructure(DEFAULT_STRUCTURE);
-                        saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
-                      }
-                    }
+                     if (fbStructure) {
+                       setStructure(fbStructure);
+                       localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
+                     } else {
+                       const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
+                       if (cachedStructure) {
+                         const parsed = JSON.parse(cachedStructure);
+                         setStructure(parsed);
+                         saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
+                       } else {
+                         setStructure(DEFAULT_STRUCTURE);
+                         saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+                       }
+                     }
                   } catch (error) {
                     console.error("Failed to load user database, falling back to LocalStorage:", error);
                     const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
@@ -737,10 +764,7 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: BarChart3 }
   ];
 
-  // Reinforce: theme fixa (isDark sempre false), remover import e componentes se não usados.
-
-  // Calculate total alerts to display inside badge
-
+  // Compute total alerts to display inside badge
   const missingPostOutorgaCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.tipoCadastro === 'Ohikari' && !Object.values(p.cursoPosOutorga.aulas).every(v => v === 'Concluido')).length;
   const noWhatsCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.jornadaEtapa !== 'Primeiro atendimento' && !p.gruposWhats.grupoSetor && !p.gruposWhats.grupoGeral).length;
   
@@ -751,571 +775,327 @@ export default function App() {
   const noPhoneCount = people.filter(p => !p.celularPrincipal).length;
   const totalAlerts = missingPostOutorgaCount + noWhatsCount + familiesSemAFCount + noSectorCount + noPhoneCount;
 
-  // Loading screen during Firebase Auth initialization
-  if (authLoading) {
-    return (
-      <div className="min-h-screen font-sans flex items-center justify-center p-4 bg-[#f4f5f7] text-slate-800">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm font-semibold tracking-wide">Iniciando aplicação...</p>
-          <p className="text-xs text-zinc-400 font-mono">Autenticação do Johrei Center</p>
+  // Render the views based on active tab
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return (
+          <DashboardView 
+            people={people} 
+            families={families} 
+            structure={structure}
+            onNavigate={(tab) => setActiveTab(tab)} 
+          />
+        );
+      case 'people':
+        return (
+          <PeopleView 
+            people={people} 
+            structure={structure}
+            onUpdatePeople={handleUpdatePeople} 
+          />
+        );
+      case 'frequenters':
+        return (
+          <FrequentersView 
+            people={people} 
+            structure={structure}
+            onUpdatePeople={handleUpdatePeople} 
+          />
+        );
+      case 'tree':
+        return (
+          <TreeView 
+            people={people} 
+            structure={structure}
+            onUpdatePeople={handleUpdatePeople} 
+          />
+        );
+      case 'journey':
+        return (
+          <JourneyView 
+            people={people} 
+            onUpdatePeople={handleUpdatePeople} 
+          />
+        );
+      case 'courses':
+        return (
+          <CoursesView 
+            people={people} 
+            onUpdatePeople={handleUpdatePeople} 
+          />
+        );
+      case 'families':
+        return (
+          <FamiliesView 
+            people={people} 
+            families={families} 
+            structure={structure}
+            onUpdatePeople={handleUpdatePeople}
+            onUpdateFamilies={handleUpdateFamilies} 
+          />
+        );
+      case 'structure':
+        return (
+          <StructureView 
+            structure={structure} 
+            onUpdateStructure={handleUpdateStructure}
+            userRole={userRole}
+          />
+        );
+      case 'pendencies':
+        return (
+          <PendenciesView 
+            people={people} 
+            families={families}
+            onUpdatePeople={handleUpdatePeople} 
+            onNavigate={(tab) => setActiveTab(tab)}
+          />
+        );
+      case 'reports':
+        return <ReportsView people={people} families={families} />;
+      case 'user-approvals':
+        return (
+          <UserApprovalsView 
+            users={appUsers} 
+            onApprove={async (uid, role) => {
+              await updateAppUserApproval(uid, true, role);
+              const updated = await fetchAllAppUsers();
+              setAppUsers(updated);
+            }} 
+            onRevoke={async (uid) => {
+              await updateAppUserApproval(uid, false, 'ASSISTANT');
+              const updated = await fetchAllAppUsers();
+              setAppUsers(updated);
+            }} 
+          />
+        );
+      default:
+        return (
+          <div className="p-8 text-center text-slate-500">
+            Página em desenvolvimento.
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen font-sans flex bg-[#f4f5f7] text-slate-800">
+      
+      {/* 1. Mobile Topbar Header */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-slate-200/60 z-30 px-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 object-contain" />
+          <span className="font-display font-bold text-xs tracking-tight text-slate-900">JC Caraguatatuba</span>
         </div>
-      </div>
-    );
-  }
+        <button 
+          onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          className="p-1.5 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 cursor-pointer"
+        >
+          {isMobileSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+        </button>
+      </header>
 
-  // Guard: if not authenticated, render AuthView
-  if (!currentUser) {
-    return <AuthView onAuthSuccess={() => {}} />;
-  }
+      {/* Backdrop for mobile menu drawer */}
+      {isMobileSidebarOpen && (
+        <div 
+          onClick={() => setIsMobileSidebarOpen(false)}
+          className="md:hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-35"
+        ></div>
+      )}
 
-  // Guard: if authenticated but not approved yet, render the pending approval view
-  if (currentUser && currentAppUser && !currentAppUser.approved) {
-    return (
-      <div className="min-h-screen font-sans flex relative overflow-hidden bg-[#f4f5f7] text-slate-800">
-        {/* Decorative background spots */}
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-400/10 blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-orange-400/10 blur-[120px] pointer-events-none"></div>
+      {/* 2. Side navigation menu drawer */}
+      <aside className={`
+        fixed top-0 bottom-0 left-0 z-40 bg-white border-r border-slate-200/60 flex flex-col justify-between transition-all duration-300
+        md:sticky md:top-0 md:h-screen md:z-20
+        ${isSidebarCollapsed ? 'w-16' : 'w-56'}
+        ${isMobileSidebarOpen ? 'translate-x-0 w-56' : '-translate-x-full md:translate-x-0'}
+      `}>
+        
+        {/* Sidebar Header Title */}
+        <div className="h-14 md:h-16 px-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2 truncate">
+            <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 shrink-0 object-contain" />
+            {!isSidebarCollapsed && (
+              <div className="truncate">
+                <span className="font-display font-extrabold text-xs tracking-tight block text-slate-900">JC Caraguá</span>
+                <span className="text-[8px] text-zinc-400 font-mono tracking-wider uppercase">Painel de Acompanhamento</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Collapse toggler for Desktop */}
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="hidden md:flex p-1 rounded-md hover:bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+          >
+            {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </button>
+        </div>
 
-        <div className="w-full flex items-center justify-center min-h-screen z-10 p-6">
-          <div className="max-w-md w-full bg-white/75 backdrop-blur-md rounded-2xl border border-slate-200/60 p-8 shadow-xl text-center space-y-6 animate-fade-in">
-            <div className="mx-auto w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-600">
-              <Shield className="w-8 h-8 animate-pulse" />
+        {/* Menu Navigation Links List */}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin">
+          {menuItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = activeTab === item.id;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`
+                  w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer relative group
+                  ${isActive 
+                    ? 'bg-teal-600 text-white shadow-xs' 
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }
+                `}
+                title={isSidebarCollapsed ? item.label : ''}
+              >
+                <IconComponent className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                
+                {!isSidebarCollapsed && (
+                  <span className="truncate">{item.label}</span>
+                )}
+
+                {/* Badge for Alert counts */}
+                {item.alertCount && totalAlerts > 0 && (
+                  <span className={`
+                    absolute right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono tracking-tight leading-none
+                    ${isActive ? 'bg-white text-teal-700' : 'bg-red-500 text-white'}
+                    ${isSidebarCollapsed ? 'top-1 right-1' : ''}
+                  `}>
+                    {totalAlerts}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Seção de Administração de Usuários (Apenas Visível para donos/ADMIN) */}
+          {currentAppUser?.role === 'ADMIN' && (
+            <div className="pt-4 mt-4 border-t border-slate-100">
+              <span className={`block px-3 mb-1 text-[8px] font-bold font-mono tracking-wider uppercase text-zinc-400 ${isSidebarCollapsed ? 'text-center' : ''}`}>
+                {isSidebarCollapsed ? 'ADM' : 'Segurança'}
+              </span>
+              <button
+                onClick={() => {
+                  setActiveTab('user-approvals');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`
+                  w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer group
+                  ${activeTab === 'user-approvals'
+                    ? 'bg-amber-600 text-white shadow-xs' 
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }
+                `}
+                title={isSidebarCollapsed ? 'Gerenciar Usuários' : ''}
+              >
+                <Shield className={`w-4 h-4 shrink-0 ${activeTab === 'user-approvals' ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                {!isSidebarCollapsed && <span className="truncate">Aprovações de Acesso</span>}
+              </button>
             </div>
+          )}
+        </nav>
 
-            <div className="space-y-2">
-              <h2 className="text-2xl font-sans font-bold tracking-tight text-slate-900">Acesso em Análise</h2>
-              <p className="text-sm text-slate-600 font-medium">
-                Você solicitou acesso ao app, aguarde o administrador.
+        {/* Sidebar Footer User Info Profile Block */}
+        <div className="p-3 border-t border-slate-100 space-y-2">
+          {!isSidebarCollapsed && (
+            <div className="px-2 py-1 rounded-xl bg-slate-50 border border-slate-100/40 text-[10px] leading-relaxed truncate space-y-1">
+              <div className="flex justify-between items-center text-slate-400 font-mono font-medium text-[8px] uppercase">
+                <span>Perfil</span>
+                <span className="font-bold text-teal-600">{currentAppUser?.role}</span>
+              </div>
+              <div className="font-bold text-slate-800 truncate">{currentUser.displayName || currentUser.email}</div>
+            </div>
+          )}
+
+          <button 
+            onClick={() => {
+              if (confirm('Deseja realmente sair da sua conta?')) {
+                logoutUser();
+              }
+            }}
+            className={`
+              w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-red-600 hover:bg-red-50 cursor-pointer
+              ${isSidebarCollapsed ? 'justify-center' : ''}
+            `}
+            title={isSidebarCollapsed ? 'Sair do Sistema' : ''}
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!isSidebarCollapsed && <span>Sair</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* 3. Main Dashboard stage canvas */}
+      <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden pt-14 md:pt-0">
+        
+        {/* Optional warning bar if Database is empty */}
+        <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {renderContent()}
+        </div>
+
+        {/* Global Footer */}
+        <footer className="py-4 px-6 border-t border-slate-200/50 text-center flex flex-col sm:flex-row justify-between items-center gap-2 text-xxs font-mono text-zinc-400 mt-auto bg-white/40">
+          <div>Johrei Center Caraguatatuba © 2026 • Gestão Interna de Membros</div>
+          <div className="flex items-center gap-3">
+            <span>Sincronizado via Firebase Firestore</span>
+            <button
+              onClick={handleResetDatabaseFully}
+              className="text-[10px] font-sans font-semibold text-red-500 hover:text-red-600 hover:underline cursor-pointer"
+            >
+              Excluir Banco de Dados
+            </button>
+          </div>
+        </footer>
+      </main>
+
+      {/* Floating AI Bulk Editor Assistant Component */}
+      <AIBulkEditor 
+        people={people} 
+        onUpdatePeople={handleUpdatePeople} 
+        activeTab={activeTab} 
+        isDark={isDark} 
+      />
+
+      {/* Full Reset Confirmation Dialog Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-md w-full space-y-4">
+            <div className="mx-auto w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            
+            <div className="text-center space-y-1">
+              <h3 className="font-sans font-bold text-base text-slate-900">Excluir Banco de Dados Inteiro?</h3>
+              <p className="text-xs text-slate-500">
+                Atenção: Essa ação é irreversível e apagará todos os dados de membros, frequentadores, histórico de cursos e estruturas armazenadas na sua conta no Firebase e em seu navegador.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/40 text-left space-y-3">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium font-mono uppercase">Usuário</span>
-                <span className="font-semibold text-slate-700 truncate max-w-[200px]">{currentAppUser.email}</span>
-              </div>
-              <div className="h-px bg-slate-200/50"></div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium font-mono uppercase">Status</span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-bold text-xxs tracking-wide uppercase">
-                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
-                  Pendente
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xxs text-zinc-400 leading-relaxed font-mono">
-              Assim que o administrador aprovar seu acesso, esta tela será atualizada automaticamente em tempo real e você poderá usar o sistema.
-            </p>
-
-            <div className="pt-2">
-              <button
-                onClick={() => logoutUser()}
-                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-                Sair / Entrar com outra conta
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Loading screen during User Private Database retrieval
-  if (isLoading) {
-    return (
-      <div className="min-h-screen font-sans flex items-center justify-center p-4 bg-[#f4f5f7] text-slate-800">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm font-semibold tracking-wide">Carregando seus dados...</p>
-          <p className="text-xs text-zinc-400 font-mono">Sincronizando com seu banco de dados privado</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Onboarding screen layout if database is empty
-  if (people.length === 0) {
-    return (
-      <div className={`min-h-screen font-sans flex relative overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#09090c] text-zinc-100' : 'bg-[#f4f5f7] text-slate-800'}`}>
-        {/* Decorative background spots */}
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-400/10 dark:bg-teal-500/5 blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-orange-400/10 dark:bg-orange-500/5 blur-[120px] pointer-events-none"></div>
-
-        <div className="w-full flex flex-col md:flex-row min-h-screen z-10">
-          
-          {/* LEFT SIDE: Brand & Welcome Presentation */}
-          <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200/40 dark:border-white/5 bg-slate-500/[0.02] dark:bg-white/[0.01]">
-            <div className="space-y-6">
-              <div className="flex items-center gap-3">
-               {/*} <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white shadow-md">*/}
-                  <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 object-contain" /> {/*substituindo landmark*/}
-                <div>
-                  <span className="font-semibold text-lg tracking-tight block font-display">Johrei Center</span>
-                  <span className="text-[10px] text-zinc-400 font-mono tracking-wider">GESTÃO & CRM</span>
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-4">
-                <h1 className="text-3xl md:text-4xl font-sans font-bold tracking-tight leading-tight">
-                  Acompanhamento Espiritual Integrado
-                </h1>
-                <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-slate-500'} leading-relaxed`}>
-                  Simplifique a gestão de membros e frequentadores, organize visitas domésticas, gerencie turmas de cursos doutrinários e acompanhe a evolução na jornada da fé em uma única interface inteligente.
-                </p>
-              </div>
-
-              {/* Functional highlights */}
-              <div className="space-y-3 pt-6">
-                <div className="flex items-start gap-3 text-xs">
-                  <div className="p-1 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 mt-0.5">
-                    <Check className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Árvore Territorial Inteligente</h4>
-                    <p className={`text-xxs ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>Organização por Setor, Bairro, Família e Assistentes responsáveis de forma automática.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 text-xs">
-                  <div className="p-1 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 mt-0.5">
-                    <Check className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Painel de Acompanhamento de Cursos</h4>
-                    <p className={`text-xxs ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>Aulas de Iniciação e Pós-Outorga com atualização dinâmica de progresso.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 text-xs">
-                  <div className="p-1 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 mt-0.5">
-                    <Check className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Alertas de Acompanhamento Crítico</h4>
-                    <p className={`text-xxs ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>Identificação rápida de membros sem grupos de WhatsApp ou sem atendimento recente.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-8 text-[11px] font-mono text-zinc-400 flex items-center justify-between">
-              <span>Unidade: Caraguatatuba</span>
-
-            </div>
-          </div>
-
-          {/* RIGHT SIDE: Drag and Drop & Paste Input */}
-          <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-center bg-transparent">
-            <div className="max-w-md w-full mx-auto space-y-6">
-              
-              <div>
-                <h2 className="text-2xl font-sans font-bold tracking-tight">Insira os dados para iniciar</h2>
-                <p className={`text-xs mt-1.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-                  Para alimentar o sistema, você pode arrastar sua planilha de membros, colar os dados em formato CSV ou utilizar nossa base de demonstração.
-                </p>
-              </div>
-
-              {/* Drag and Drop Zone Container */}
-              <div 
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => onboardingFileRef.current?.click()}
-                className={`p-8 rounded-2xl border-2 border-dashed text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-3 ${
-                  isDragging 
-                    ? 'border-teal-500 bg-teal-500/10 scale-[1.02] shadow-md shadow-teal-500/5' 
-                    : `${isDark ? 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/20' : 'border-slate-200 hover:border-slate-300 bg-white/40'} hover:shadow-xs`
-                }`}
-              >
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  ref={onboardingFileRef}
-                  onChange={handleOnboardingFileUpload}
-                  className="hidden"
-                />
-                
-                <div className={`p-4 rounded-full ${isDragging ? 'bg-teal-500 text-white' : 'bg-teal-500/10 text-teal-600 dark:text-teal-400'} transition-all`}>
-                  <Upload className="w-6 h-6" />
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-800 dark:text-zinc-200">
-                    Arraste e solte o arquivo CSV aqui
-                  </p>
-                  <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>
-                    ou clique para navegar no seu computador
-                  </p>
-                </div>
-
-                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 text-[9px] font-mono font-bold text-zinc-400">
-                  Apenas planilhas .CSV
-                </span>
-              </div>
-
-              {/* Optional Manual Copy/Paste Fallback */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-[10px] font-mono text-zinc-400 uppercase font-bold">
-                  <span>Ou cole o texto formatado em CSV</span>
-                  <button 
-                    onClick={() => {
-                      setOnboardingCSV(generateSampleCSVString());
-                      setOnboardingError('');
-                    }}
-                    className="text-xxs text-teal-600 dark:text-teal-400 hover:underline cursor-pointer font-sans"
-                  >
-                    Carregar Exemplo
-                  </button>
-                </div>
-
-                <textarea
-                  rows={3}
-                  placeholder="ID,Nome,Idade,Setor,EndereçoCompleto..."
-                  value={onboardingCSV}
-                  onChange={(e) => setOnboardingCSV(e.target.value)}
-                  className={`w-full p-2.5 font-mono text-[10px] rounded-lg border focus:outline-none focus:border-teal-500 ${isDark ? 'bg-zinc-900/60 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-800'}`}
-                />
-
-                {onboardingError && (
-                  <p className="text-xxs text-red-500 font-mono flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> {onboardingError}
-                  </p>
-                )}
-
-                {onboardingCSV.trim() && (
-                  <button
-                    onClick={handleOnboardingImport}
-                    className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    Importar do Editor
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3 py-1">
-                <span className="h-px bg-slate-200/60 dark:bg-white/5 flex-1"></span>
-                <span className="text-[10px] font-mono uppercase text-zinc-400 tracking-wider">ou use dados de teste</span>
-                <span className="h-px bg-slate-200/60 dark:bg-white/5 flex-1"></span>
-              </div>
-
-              {/* Quick demo loader */}
-              <button
-                onClick={handleLoadDemoData}
-                className={`w-full py-2.5 rounded-xl border font-bold text-xs hover:bg-slate-50 dark:hover:bg-zinc-850/60 transition-all flex items-center justify-center gap-1.5 cursor-pointer backdrop-blur-md ${isDark ? 'border-zinc-800 text-teal-400 bg-zinc-950/20' : 'border-slate-200 text-teal-600 bg-slate-50/50'}`}
-              >
-                <Sparkles className="w-4 h-4" />
-                Iniciar com Dados de Demonstração
-              </button>
-
-            </div>
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`min-h-screen font-sans transition-colors duration-300 relative overflow-hidden ${isDark ? 'bg-[#09090c] text-[#fafafa]' : 'bg-[#f4f5f7] text-[#0f172a]'}`}>
-      {/* Frosted Glass background elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-400/10 dark:bg-teal-500/5 blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-orange-400/10 dark:bg-orange-500/5 blur-[120px] pointer-events-none"></div>
-      
-      <div className="flex h-screen overflow-hidden relative z-10">
-        
-        {/* SIDEBAR NAVIGATION */}
-        <aside 
-          className={`flex-shrink-0 flex flex-col justify-between glass-sidebar transition-all duration-300 relative z-30
-            ${isSidebarCollapsed ? 'w-16' : 'w-64'} 
-            ${isMobileSidebarOpen ? 'translate-x-0 fixed inset-y-0 left-0 w-64' : 'max-md:-translate-x-full max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:w-64'}
-          `}
-        >
-          <div className="flex flex-col flex-1 overflow-y-auto">
-            {/* Header / Logo */}
-            <div className="p-4 border-b border-slate-200/40 dark:border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <span className="p-1.5 bg-teal-00 rounded-lg text-white font-bold shadow-xs">
-                  <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 object-contain" /> {/*substituindo landmark*/}
-                </span>
-                {!isSidebarCollapsed && (
-                  <div>
-                    <span className="font-semibold text-sm tracking-tight block font-display truncate">Caraguatatuba</span>
-                    <span className="text-[9px] text-zinc-400 font-mono tracking-wider"></span>
-                  </div>
-                )}
-              </div>
-
-              {/* Desktop Collapse Button */}
-              <button 
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className="hidden md:block p-1.5 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
-                title={isSidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-              >
-                {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-              </button>
-
-              {/* Mobile Close Button */}
-              <button 
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className="md:hidden p-1.5 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Navigation links */}
-            <nav className="p-3 space-y-1 flex-1">
-              {[
-                ...menuItems,
-                ...(currentAppUser?.role === 'ADMIN' ? [
-                  { id: 'approvals', label: 'Controle de Acesso', icon: Shield }
-                ] : [])
-              ].map(item => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    id={`sidebar-${item.id}`}
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setIsMobileSidebarOpen(false); // Auto-close on mobile selection
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition-all text-left cursor-pointer ${
-                      isActive 
-                        ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-l-2 border-teal-500' 
-                        : `${isDark ? 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`
-                    }`}
-                    title={isSidebarCollapsed ? item.label : undefined}
-                  >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    {!isSidebarCollapsed && <span className="flex-1 truncate">{item.label}</span>}
-                    {!isSidebarCollapsed && 'alertCount' in item && item.alertCount && totalAlerts > 0 && (
-                      <span className="px-1.5 py-0.2 bg-orange-500 text-white rounded-full font-mono text-[9px] font-bold">
-                        {totalAlerts}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Footer controls (Theme & Role switchers) */}
-          <div className="p-3 border-t border-slate-200/40 dark:border-white/5 space-y-2">
-            {/* User profile / Logout */}
-            <div className={`p-2 rounded-lg text-xxs border ${isDark ? 'bg-zinc-950/40 border-zinc-850 text-zinc-300' : 'bg-slate-100/40 border-slate-200/50 text-slate-700'} backdrop-blur-xs`}>
-              <div className="flex items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1.5 truncate">
-                  <div className="w-5 h-5 rounded-full bg-teal-600 flex items-center justify-center text-white text-[10px] font-bold uppercase">
-                    {currentUser?.displayName ? currentUser.displayName[0] : (currentUser?.email ? currentUser.email[0] : 'U')}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <div className="truncate">
-                      <span className="font-bold block truncate max-w-[120px]">
-                        {currentUser?.displayName || (currentUser?.email ? currentUser.email.split('@')[0] : 'Usuário')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={async () => {
-                    if (confirm('Deseja realmente sair?')) {
-                      await logoutUser();
-                    }
-                  }}
-                  className="p-1 rounded-md text-red-500 hover:bg-red-500/10 cursor-pointer"
-                  title="Sair da Conta"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Completely Clear database button for full admin reset */}
-            {!isSidebarCollapsed && userRole === 'ADMIN' && (
-              <button 
-                onClick={handleResetDatabaseFully}
-                className="w-full text-center text-[10px] font-bold text-red-500 hover:underline py-1.5 rounded hover:bg-red-500/5 cursor-pointer block"
-              >
-                Limpar Banco de Dados
-              </button>
-            )}
-          </div>
-        </aside>
-
-        {/* Mobile Sidebar backdrop overlay */}
-        {isMobileSidebarOpen && (
-          <div 
-            onClick={() => setIsMobileSidebarOpen(false)}
-            className="fixed inset-0 bg-black/50 z-20 md:hidden backdrop-blur-xs transition-opacity duration-300"
-          ></div>
-        )}
-
-        {/* MAIN BODY AREA */}
-        <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
-          
-          {/* Top minimal bar with hamburger trigger on mobile */}
-          <header className="px-6 py-4 flex items-center glass-header md:hidden">
-            <button 
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="p-1.5 -ml-1 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          </header>
-
-          {/* Tab View switching workspace */}
-          <div className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
-            {activeTab === 'dashboard' && (
-              <DashboardView 
-                people={people} 
-                families={families} 
-                onNavigate={setActiveTab}
-                isDark={isDark}
-              />
-            )}
-
-            {activeTab === 'people' && (
-              <PeopleView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
-                isDark={isDark}
-                currentUserRole={userRole}
-                currentAMName={userRole === 'AM' ? currentAMName : undefined}
-                structure={structure}
-              />
-            )}
-
-            {activeTab === 'frequenters' && (
-              <FrequentersView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
-                isDark={isDark}
-                currentUserRole={userRole}
-                currentAMName={userRole === 'AM' ? currentAMName : undefined}
-                structure={structure}
-              />
-            )}
-
-            {activeTab === 'tree' && (
-              <TreeView 
-                people={people} 
-                families={families} 
-                structure={structure}
-                isDark={isDark} 
-              />
-            )}
-
-            {activeTab === 'journey' && (
-              <JourneyView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
-                isDark={isDark} 
-              />
-            )}
-
-            {activeTab === 'courses' && (
-              <CoursesView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
-                isDark={isDark} 
-              />
-            )}
-
-            {activeTab === 'families' && (
-              <FamiliesView 
-                families={families} 
-                onUpdateFamilies={handleUpdateFamilies}
-                people={people} 
-                isDark={isDark} 
-              />
-            )}
-
-            {activeTab === 'structure' && (
-              <StructureView 
-                structure={structure}
-                onUpdateStructure={handleUpdateStructure}
-                people={people}
-                isDark={isDark}
-              />
-            )}
-
-            {activeTab === 'pendencies' && (
-              <PendenciesView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople}
-                families={families} 
-                onUpdateFamilies={handleUpdateFamilies}
-                isDark={isDark} 
-              />
-            )}
-
-            {activeTab === 'reports' && (
-              <ReportsView 
-                people={people} 
-                families={families} 
-                isDark={isDark} 
-              />
-            )}
-
-            {activeTab === 'approvals' && (
-              <UserApprovalsView 
-                currentUserUid={currentUser.uid} 
-              />
-            )}
-          </div>
-        </main>
-      </div>
-
-      {/* Custom Confirmation Modal for Database Reset */}
-      {showResetModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className={`w-full max-w-md p-6 rounded-2xl shadow-xl border animate-fade-in ${
-            isDark ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-800'
-          }`}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-red-500/10 text-red-500 rounded-lg">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold">Exclusão Permanente de Dados</h3>
-            </div>
-            
-            <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-slate-500'} leading-relaxed mb-6`}>
-              Atenção: Isso excluirá <strong>permanentemente</strong> todos os dados salvos neste Johrei Center, incluindo membros, frequentadores, históricos de acompanhamento e vínculos territoriais. Esta operação é irreversível e o sistema retornará ao estado de alimentação inicial. Deseja prosseguir?
-            </p>
-
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-2">
               <button
                 onClick={() => setShowResetModal(false)}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer ${
-                  isDark ? 'text-zinc-300' : 'text-slate-600'
-                }`}
+                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 onClick={confirmResetDatabase}
-                className="px-4 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer"
+                className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer"
               >
-                Apagar Tudo
+                Sim, Excluir Tudo
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* AI Bulk Editor Floating Panel */}
-      <AIBulkEditor 
-        people={people} 
-        onUpdatePeople={handleUpdatePeople} 
-        activeTab={activeTab}
-        isDark={isDark}
-      />
     </div>
   );
 }
