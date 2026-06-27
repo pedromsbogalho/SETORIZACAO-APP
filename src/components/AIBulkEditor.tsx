@@ -190,7 +190,54 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
       setPrompt('');
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Ocorreu um erro ao processar o comando.');
+      
+      let rawMsg = err.message || 'Ocorreu um erro ao processar o comando.';
+      let friendlyMsg = rawMsg;
+      
+      // Try to parse the message if it's a JSON string to extract the raw nested message
+      try {
+        if (rawMsg.includes('{')) {
+          const startIdx = rawMsg.indexOf('{');
+          const endIdx = rawMsg.lastIndexOf('}') + 1;
+          const jsonSub = rawMsg.substring(startIdx, endIdx);
+          const parsed = JSON.parse(jsonSub);
+          if (parsed.error && parsed.error.message) {
+            rawMsg = parsed.error.message;
+          } else if (parsed.message) {
+            rawMsg = parsed.message;
+          }
+        }
+      } catch (pErr) {
+        // Not a JSON string or parsing failed, keep raw message
+      }
+
+      // Translate common Gemini API errors to clear, friendly Portuguese explanations
+      if (
+        rawMsg.toLowerCase().includes('high demand') || 
+        rawMsg.toLowerCase().includes('503') || 
+        rawMsg.toLowerCase().includes('temporarily') || 
+        rawMsg.toLowerCase().includes('unavailable')
+      ) {
+        friendlyMsg = 'Os servidores do Gemini estão com uma demanda temporariamente muito alta agora (Erro 503). Por favor, aguarde alguns segundos e tente novamente.';
+      } else if (
+        rawMsg.toLowerCase().includes('quota') || 
+        rawMsg.toLowerCase().includes('rate limit') || 
+        rawMsg.toLowerCase().includes('429')
+      ) {
+        friendlyMsg = 'Limite de requisições excedido temporariamente (Erro 429). Por favor, aguarde um momento antes de tentar novamente.';
+      } else if (
+        rawMsg.toLowerCase().includes('api key') || 
+        rawMsg.toLowerCase().includes('api_key') || 
+        rawMsg.toLowerCase().includes('not configured')
+      ) {
+        friendlyMsg = 'Chave de API do Gemini não configurada no servidor ou inválida. Por favor, verifique se inseriu a chave GEMINI_API_KEY corretamente nas configurações.';
+      } else {
+        friendlyMsg = rawMsg;
+      }
+
+      setError(friendlyMsg);
+    } catch (e) {
+      // safe fallback
     } finally {
       setIsLoading(false);
     }
