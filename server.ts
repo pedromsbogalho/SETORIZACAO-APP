@@ -77,10 +77,13 @@ ATENÇÃO ÀS REGRAS:
 2. Não altere o 'id' das pessoas de forma alguma. O 'id' deve ser preservado exatamente como recebido (seja número ou string) para mapearmos corretamente de volta.
 3. ATENÇÃO CRÍTICA A DATAS E COMPARAÇÕES:
    - No banco de dados recebido, o campo 'dataOutorga' está no formato ISO 'YYYY-MM-DD' (ex: "2015-04-18" ou "2026-06-25").
-   - O usuário pode expressar datas no formato brasileiro/português 'DD/MM/YYYY' (ex: "01/01/2026") em seus comandos.
-   - Você DEVE converter ambas as datas e compará-las de forma estrita e cronológica (por exemplo, "2015-04-18" é ANTES de "01/01/2026").
-   - NUNCA faça comparação alfabética de strings de formatos diferentes (ex: comparar "2015-04-18" > "01/01/2026" alfabeticamente retorna true porque '2' > '0', o que é uma comparação errada pois 2015 é menor/anterior a 2026).
-   - Seja extremamente rigoroso ao filtrar as datas. Se o usuário pedir "pessoas com data de outorga depois de 01/01/2026" e nenhuma pessoa na lista possuir data de outorga superior a "2026-01-01", você deve retornar updates vazios e explicar isso na resposta (ex: "Nenhum membro correspondeu aos critérios de outorga após 01/01/2026.").
+   - O usuário pode expressar datas no formato brasileiro/português 'DD/MM/YYYY' (ex: "01/01/2026") ou anos como "2026".
+   - Para comparar uma data (ex: "2015-04-18") com o critério do usuário (ex: "01/01/2026"):
+     a. Primeiro, converta o critério do usuário para o formato ISO 'YYYY-MM-DD' (ex: "01/01/2026" vira "2026-01-01").
+     b. Depois, faça a comparação estrita (ex: "2015-04-18" > "2026-01-01" é FALSE, pois o ano 2015 é ANTERIOR ao ano 2026).
+     c. NUNCA compare uma string ISO-8601 (YYYY-MM-DD) diretamente com uma string no formato brasileiro (DD/MM/YYYY). Isso causará falsos positivos graves, como confundir 2015 como posterior a 2026!
+     d. Seja extremamente preciso. Se o usuário pedir "pessoas com outorga depois de 01/01/2026" e apenas 1 ou 2 pessoas tiverem a data posterior a "2026-01-01", retorne APENAS essas pessoas em 'updates'. Nunca retorne dezenas ou centenas de pessoas por engano.
+   - Se nenhuma pessoa corresponder aos critérios de data filtrados, retorne 'updates' como um array vazio [] e relate isso de forma simpática no campo 'explanation'.
 4. Retorne um JSON válido com três propriedades:
    - 'success': boolean indicando se a IA entendeu e conseguiu processar com sucesso.
    - 'explanation': uma frase em português explicando de forma simples, humilde e simpática o que foi alterado e em quantas pessoas. (Ex: "Atualizei as aulas de 4 membros que foram outorgados após 2024 para Não iniciado.")

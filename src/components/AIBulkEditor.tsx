@@ -140,14 +140,35 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
               4: 'Não iniciou',
               5: 'Não iniciou'
             };
-            const incomingAulas = updateObj.updates.cursoPosOutorga.aulas || {};
+
+            // Extract incoming lesson status from multiple possible structures
+            const rawCursoPosOutorga = updateObj.updates.cursoPosOutorga || {};
+            const incomingAulas = rawCursoPosOutorga.aulas || rawCursoPosOutorga || {};
+
+            const getLessonValue = (num: number) => {
+              const keyStr = String(num);
+              
+              // 1. Try flat updates if present
+              const flatVal = updateObj.updates[`cursoPosOutorga.aulas.${keyStr}`] || 
+                              updateObj.updates[`cursoPosOutorga.aulas[${keyStr}]`] || 
+                              updateObj.updates[`cursoPosOutorga.${keyStr}`];
+              if (flatVal && typeof flatVal === 'string') return flatVal;
+
+              // 2. Try nested object properties
+              const nestedVal = incomingAulas[num] || incomingAulas[keyStr];
+              if (nestedVal && typeof nestedVal === 'string') return nestedVal;
+
+              // 3. Fallback to existing value
+              return existingAulas[num as 1|2|3|4|5] || 'Não iniciou';
+            };
+
             merged.cursoPosOutorga = {
               aulas: {
-                1: incomingAulas[1] || incomingAulas["1"] || existingAulas[1] || 'Não iniciou',
-                2: incomingAulas[2] || incomingAulas["2"] || existingAulas[2] || 'Não iniciou',
-                3: incomingAulas[3] || incomingAulas["3"] || existingAulas[3] || 'Não iniciou',
-                4: incomingAulas[4] || incomingAulas["4"] || existingAulas[4] || 'Não iniciou',
-                5: incomingAulas[5] || incomingAulas["5"] || existingAulas[5] || 'Não iniciou'
+                1: getLessonValue(1),
+                2: getLessonValue(2),
+                3: getLessonValue(3),
+                4: getLessonValue(4),
+                5: getLessonValue(5)
               }
             };
           }

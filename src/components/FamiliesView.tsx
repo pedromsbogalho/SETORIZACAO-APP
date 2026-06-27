@@ -38,8 +38,8 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
     const map: Record<string, string[]> = {};
     families.forEach(f => {
       const familyMembers = people.filter(p => p.idFamilia === f.id);
-      const sectors = Array.from(new Set(familyMembers.map(m => m.setor2).filter(Boolean)));
-      map[f.id] = sectors.length > 0 ? sectors : ['Sem Setor'];
+      const sectors = Array.from(new Set(familyMembers.map(m => m.setor2?.trim().toUpperCase()).filter(Boolean)));
+      map[f.id] = sectors.length > 0 ? sectors : ['SEM SETOR'];
     });
     return map;
   }, [families, people]);
@@ -48,8 +48,8 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
     const map: Record<string, string[]> = {};
     families.forEach(f => {
       const familyMembers = people.filter(p => p.idFamilia === f.id);
-      const neighborhoods = Array.from(new Set(familyMembers.map(m => m.bairroAjustado).filter(Boolean)));
-      map[f.id] = neighborhoods.length > 0 ? neighborhoods : ['Sem Bairro'];
+      const neighborhoods = Array.from(new Set(familyMembers.map(m => m.bairroAjustado?.trim().toUpperCase()).filter(Boolean)));
+      map[f.id] = neighborhoods.length > 0 ? neighborhoods : ['SEM BAIRRO'];
     });
     return map;
   }, [families, people]);
@@ -198,10 +198,10 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
             <span className="block text-[9px] font-bold font-mono uppercase text-zinc-400 tracking-wider">
               Filtrar por Setor (Clicável)
             </span>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-row md:flex-wrap gap-1 overflow-x-auto md:overflow-x-visible pb-1.5 max-w-full scrollbar-none snap-x">
               <button
                 onClick={() => setSelectedSector('Todos')}
-                className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase ${
+                className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase shrink-0 snap-start ${
                   selectedSector === 'Todos'
                     ? 'bg-teal-600 text-white'
                     : isDark
@@ -215,7 +215,7 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
                 <button
                   key={sec}
                   onClick={() => setSelectedSector(sec)}
-                  className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase ${
+                  className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase shrink-0 snap-start ${
                     selectedSector === sec
                       ? 'bg-teal-600 text-white'
                       : isDark

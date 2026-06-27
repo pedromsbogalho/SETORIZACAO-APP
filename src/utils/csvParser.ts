@@ -142,8 +142,18 @@ export function parseCSV(text: string): Partial<Person>[] {
 
     // Mapping fields with robust extraction
     const code = getRowValue(['CODIGO CADASTRO', 'CODIGO_CADASTRO', 'CODIGO', 'CODE']) || String(1000000 + i);
-    const nome = getRowValue(['NOME', 'NAME']) || '';
-    if (!nome) continue; // Skip empty rows
+    const nome = (getRowValue(['NOME', 'NAME']) || '').trim();
+    const nomeUpper = nome.toUpperCase();
+    if (!nome || 
+        nomeUpper.includes('FALTA LOGRADOURO') || 
+        nomeUpper.includes('LOGRADOURO') || 
+        nomeUpper.startsWith(',') || 
+        nomeUpper.startsWith('0,') || 
+        nomeUpper.startsWith('1,') || 
+        nomeUpper === 'N/A'
+    ) {
+      continue; // Skip malformed rows
+    }
 
     const subtipoRaw = getRowValue(['SUBTIPO CADASTRO', 'SUBTIPO_CADASTRO', 'SUBTIPO']).trim().toUpperCase();
     const tipoRaw = getRowValue(['TIPO CADASTRO', 'TIPO_CADASTRO', 'TIPO']).trim().toUpperCase();

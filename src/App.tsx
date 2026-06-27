@@ -167,16 +167,63 @@ export default function App() {
     });
   };
 
-  // Helper to de-duplicate and clean loaded people
+  // Helper to de-duplicate, sanitize, and clean loaded people
   const cleanAndDeDuplicatePeople = (pList: Person[]): Person[] => {
     const seenIds = new Set<string>();
-    return pList.filter(p => {
+    
+    // Parse malformed names containing commas (e.g. from comma/semicolon CSV export split glitches)
+    const sanitizedList = pList.map(p => {
+      let name = (p.nome || '').trim();
+      if (name.includes(',')) {
+        const parts = name.split(',').map(x => x.trim()).filter(Boolean);
+        if (parts.length >= 3) {
+          const firstPartIsNumber = /^\d+$/.test(parts[0]);
+          if (firstPartIsNumber || parts.length >= 4) {
+            let offset = firstPartIsNumber ? 1 : 0;
+            const af = parts[offset] || '';
+            const sector = parts[offset + 1] || '';
+            const realName = parts[offset + 2] || '';
+            const address = parts.slice(offset + 3).join(', ') || '';
+            
+            const updated = { ...p };
+            if (realName) updated.nome = realName.toUpperCase();
+            if (af) updated.af2 = af.toUpperCase();
+            if (sector) updated.setor2 = sector.toUpperCase();
+            if (address && (!p.endCompleto || p.endCompleto === 'Endereço não informado' || p.endCompleto.length < 5)) {
+              updated.endCompleto = address;
+            }
+            return updated;
+          }
+        }
+      }
+      return p;
+    });
+
+    return sanitizedList.filter(p => {
       if (!p.id) return false;
       const key = p.id.trim();
       if (seenIds.has(key)) return false;
+      
+      const name = (p.nome || '').trim().toUpperCase();
+      if (!name || 
+          name.includes('FALTA LOGRADOURO') || 
+          name.includes('LOGRADOURO') || 
+          name.startsWith(',') || 
+          name.startsWith('0,') || 
+          name.startsWith('1,') || 
+          name === 'N/A'
+      ) {
+        return false;
+      }
+      
       seenIds.add(key);
       return true;
     });
+  };
+
+  const cleanSanitizeAndEnrichPeople = (pList: Person[]): Person[] => {
+    const cleaned = cleanAndDeDuplicatePeople(pList);
+    return enrichPeopleWithFamilyIds(cleaned);
   };
 
   // Load from Firebase on application start depending on authentication
@@ -220,7 +267,7 @@ export default function App() {
           const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
 
           if (cachedPeople) {
-            setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
+            setPeople(cleanSanitizeAndEnrichPeople(JSON.parse(cachedPeople)));
           } else {
             setPeople([]);
           }
@@ -267,7 +314,7 @@ export default function App() {
                     const fbStructure = await fetchStructureFromFirebase(user.uid);
 
                     if (fbPeople && fbPeople.length > 0) {
-                      const cleanPeople = cleanAndDeDuplicatePeople(fbPeople);
+                      const cleanPeople = cleanSanitizeAndEnrichPeople(fbPeople);
                       setPeople(cleanPeople);
                       localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
                     } else {
@@ -275,7 +322,7 @@ export default function App() {
                       if (cachedPeople) {
                         const parsed = JSON.parse(cachedPeople);
                         if (parsed.length > 0) {
-                          const cleanPeople = cleanAndDeDuplicatePeople(parsed);
+                          const cleanPeople = cleanSanitizeAndEnrichPeople(parsed);
                           setPeople(cleanPeople);
                           savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
                         }
@@ -303,7 +350,7 @@ export default function App() {
                     const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
                     const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
                     if (cachedPeople) {
-                      setPeople(cleanAndDeDuplicatePeople(JSON.parse(cachedPeople)));
+                      setPeople(cleanSanitizeAndEnrichPeople(JSON.parse(cachedPeople)));
                     }
                     if (cachedStructure) {
                       setStructure(JSON.parse(cachedStructure));
@@ -370,18 +417,13 @@ export default function App() {
     }
     
     const groups: Record<string, Person[]> = {};
-    const noAddressPeople: Person[] = [];
     
     people.forEach(p => {
-      const addr = (p.endCompleto || '').trim().toUpperCase();
-      if (!addr || addr === 'N/A' || addr === 'SEM ENDEREÇO' || addr.length < 5) {
-        noAddressPeople.push(p);
-      } else {
-        if (!groups[addr]) {
-          groups[addr] = [];
-        }
-        groups[addr].push(p);
+      const famId = (p.idFamilia && p.idFamilia.startsWith('FAM-')) ? p.idFamilia : `FAM-${p.id}`;
+      if (!groups[famId]) {
+        groups[famId] = [];
       }
+      groups[famId].push(p);
     });
     
     const derived: Family[] = [];
@@ -398,26 +440,31 @@ export default function App() {
       }, list[0]);
     };
     
-    Object.entries(groups).forEach(([addr, list]) => {
+    Object.entries(groups).forEach(([famId, list]) => {
       const oldest = getOldest(list);
+      
+      // Prefer a valid street address, starting with the oldest person's address
+      let finalAddress = '';
+      const oldestAddress = (oldest.endCompleto || '').trim();
+      if (oldestAddress && oldestAddress !== 'N/A' && oldestAddress !== 'SEM ENDEREÇO' && oldestAddress.length >= 5) {
+        finalAddress = oldest.endCompleto;
+      } else {
+        const withAddr = list.find(m => {
+          const mAddr = (m.endCompleto || '').trim();
+          return mAddr && mAddr !== 'N/A' && mAddr !== 'SEM ENDEREÇO' && mAddr.length >= 5;
+        });
+        finalAddress = withAddr?.endCompleto || oldest.endCompleto || 'Endereço não informado';
+      }
+
+      const hasNoAddress = !finalAddress || finalAddress === 'Endereço não informado' || finalAddress === 'N/A' || finalAddress === 'SEM ENDEREÇO' || finalAddress.length < 5;
+      
       derived.push({
-        id: `FAM-${oldest.id}`,
-        nome: `FAMÍLIA DE ${oldest.nome}`,
-        endereco: oldest.endCompleto || addr,
+        id: famId,
+        nome: `FAMÍLIA DE ${oldest.nome}${hasNoAddress ? ' (S/ End.)' : ''}`,
+        endereco: finalAddress,
         afResponsavel: oldest.af2 || oldest.am || 'Sem AF',
         historico: '',
-        observacoes: `Grupo residencial com ${list.length} integrantes.`
-      });
-    });
-    
-    noAddressPeople.forEach(p => {
-      derived.push({
-        id: `FAM-${p.id}`,
-        nome: `FAMÍLIA DE ${p.nome} (S/ End.)`,
-        endereco: p.endCompleto || 'Endereço não informado',
-        afResponsavel: p.af2 || p.am || 'Sem AF',
-        historico: '',
-        observacoes: 'Cadastro individual.'
+        observacoes: hasNoAddress ? 'Cadastro individual.' : `Grupo residencial com ${list.length} integrantes.`
       });
     });
     
@@ -427,7 +474,7 @@ export default function App() {
   // Sync to LocalStorage & Firebase (Differential/Granular Sync)
   const handleUpdatePeople = async (newPeople: Person[]) => {
     if (!currentUser) return;
-    const enriched = enrichPeopleWithFamilyIds(newPeople);
+    const enriched = cleanSanitizeAndEnrichPeople(newPeople);
 
     // Identifica apenas os registros que foram alterados, adicionados ou deletados
     const changedPeople: Person[] = [];
@@ -500,7 +547,7 @@ export default function App() {
       };
     });
 
-    const enriched = enrichPeopleWithFamilyIds(nextPeople);
+    const enriched = cleanSanitizeAndEnrichPeople(nextPeople);
     setPeople(enriched);
     localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
 
@@ -528,7 +575,7 @@ export default function App() {
   // Helper for quick load demo database
   const handleLoadDemoData = async () => {
     if (!currentUser) return;
-    const enriched = enrichPeopleWithFamilyIds(INITIAL_PEOPLE);
+    const enriched = cleanSanitizeAndEnrichPeople(INITIAL_PEOPLE);
     setPeople(enriched);
     localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
     try {
@@ -553,7 +600,7 @@ export default function App() {
         setOnboardingError('Nenhum dado válido encontrado.');
         return;
       }
-      const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
+      const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
       setPeople(enriched);
       localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
       setOnboardingError('');
@@ -595,7 +642,7 @@ export default function App() {
           try {
             const parsed = parseCSV(text);
             if (parsed.length > 0) {
-              const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
+              const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
               setPeople(enriched);
               localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
               setOnboardingError('');
@@ -633,7 +680,7 @@ export default function App() {
       try {
         const parsed = parseCSV(text);
         if (parsed.length > 0) {
-          const enriched = enrichPeopleWithFamilyIds(parsed as Person[]);
+          const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
           setPeople(enriched);
           localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
           setOnboardingError('');
