@@ -120,11 +120,27 @@ function MapContent({ address, familyName }: { address: string; familyName: stri
     setLoading(true);
     setError(null);
 
+    // Sanitize and check for missing/placeholder addresses
+    const cleanedAddress = address ? address.trim() : '';
+    const isPlaceholder = !cleanedAddress || 
+                          cleanedAddress.toLowerCase() === 'endereço não informado' || 
+                          cleanedAddress.toLowerCase().includes('não informado') || 
+                          cleanedAddress.toLowerCase().includes('não cadastrado');
+
+    if (isPlaceholder) {
+      setCoordinates(DEFAULT_CENTER);
+      map.setCenter(DEFAULT_CENTER);
+      map.setZoom(13);
+      setError('Endereço não informado para esta família. Cadastre um endereço válido para ver a localização.');
+      setLoading(false);
+      return;
+    }
+
     const geocoder = new google.maps.Geocoder();
     // Search within Caraguatatuba bounds by default to keep it localized
     geocoder.geocode(
       { 
-        address: `${address}, Caraguatatuba, SP, Brasil`,
+        address: `${cleanedAddress}, Caraguatatuba, SP, Brasil`,
       },
       (results, status) => {
         if (status === 'OK' && results && results[0]) {
@@ -133,9 +149,10 @@ function MapContent({ address, familyName }: { address: string; familyName: stri
           setCoordinates(coords);
           map.setCenter(coords);
           map.setZoom(16);
+          setLoading(false);
         } else {
-          // If detailed search failed, try without the suffix constraints
-          geocoder.geocode({ address }, (retryResults, retryStatus) => {
+          // If detailed search failed, try without the Caraguatatuba suffix constraints
+          geocoder.geocode({ address: cleanedAddress }, (retryResults, retryStatus) => {
             if (retryStatus === 'OK' && retryResults && retryResults[0]) {
               const loc = retryResults[0].geometry.location;
               const coords = { lat: loc.lat(), lng: loc.lng() };
@@ -143,15 +160,28 @@ function MapContent({ address, familyName }: { address: string; familyName: stri
               map.setCenter(coords);
               map.setZoom(16);
             } else {
-              console.warn(`Geocoding failed for "${address}": ${status}`);
-              setError('Não foi possível localizar o endereço exato. Mostrando região central.');
+              console.warn(`Geocoding failed for "${cleanedAddress}". Primary status: ${status}, Retry status: ${retryStatus}`);
+              
+              let friendlyMessage = 'Não foi possível localizar o endereço exato. Mostrando região central de Caraguatatuba.';
+              
+              if (status === 'REQUEST_DENIED' || retryStatus === 'REQUEST_DENIED') {
+                friendlyMessage = 'Erro na API: A "Geocoding API" não está ativada no seu console Google Cloud para esta chave. Por favor, ative-a no painel do Google Cloud.';
+              } else if (status === 'ZERO_RESULTS' && retryStatus === 'ZERO_RESULTS') {
+                friendlyMessage = `Endereço "${cleanedAddress}" não encontrado pelo Google Maps em Caraguatatuba. Verifique a grafia ou número.`;
+              } else if (status === 'OVER_QUERY_LIMIT' || retryStatus === 'OVER_QUERY_LIMIT') {
+                friendlyMessage = 'Erro na API: Limite de cota excedido (OVER_QUERY_LIMIT) no Google Maps. Ative o faturamento ou cota no Google Cloud.';
+              } else if (status === 'INVALID_REQUEST' || retryStatus === 'INVALID_REQUEST') {
+                friendlyMessage = 'Erro na API: Requisição inválida ao pesquisar endereço.';
+              }
+
+              setError(friendlyMessage);
               setCoordinates(DEFAULT_CENTER);
               map.setCenter(DEFAULT_CENTER);
               map.setZoom(13);
             }
+            setLoading(false);
           });
         }
-        setLoading(false);
       }
     );
   }, [address, map]);
