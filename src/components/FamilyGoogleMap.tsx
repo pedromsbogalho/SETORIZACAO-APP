@@ -152,20 +152,59 @@ function MapContent({ address, familyName }: { address: string; familyName: stri
           setLoading(false);
         } else {
           // If detailed search failed, try without the Caraguatatuba suffix constraints
-          geocoder.geocode({ address: cleanedAddress }, (retryResults, retryStatus) => {
+          geocoder.geocode({ address: cleanedAddress }, async (retryResults, retryStatus) => {
             if (retryStatus === 'OK' && retryResults && retryResults[0]) {
               const loc = retryResults[0].geometry.location;
               const coords = { lat: loc.lat(), lng: loc.lng() };
               setCoordinates(coords);
               map.setCenter(coords);
               map.setZoom(16);
+              setLoading(false);
             } else {
-              console.warn(`Geocoding failed for "${cleanedAddress}". Primary status: ${status}, Retry status: ${retryStatus}`);
+              console.warn(`Google Geocoding failed for "${cleanedAddress}". Primary status: ${status}, Retry status: ${retryStatus}. Trying backup geocoder (OpenStreetMap Nominatim)...`);
               
+              try {
+                // Try with Caraguatatuba context
+                let fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(`${cleanedAddress}, Caraguatatuba, SP, Brasil`)}`;
+                let response = await fetch(fallbackUrl, {
+                  headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'JohreiCenterCaraguatatubaApp/1.0'
+                  }
+                });
+                let data = await response.json();
+
+                // If not found, try raw address
+                if (!data || data.length === 0) {
+                  fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(cleanedAddress)}`;
+                  response = await fetch(fallbackUrl, {
+                    headers: {
+                      'Accept': 'application/json',
+                      'User-Agent': 'JohreiCenterCaraguatatubaApp/1.0'
+                    }
+                  });
+                  data = await response.json();
+                }
+
+                if (data && data.length > 0) {
+                  const lat = parseFloat(data[0].lat);
+                  const lng = parseFloat(data[0].lon);
+                  const coords = { lat, lng };
+                  setCoordinates(coords);
+                  map.setCenter(coords);
+                  map.setZoom(16);
+                  setError(null); // Clear errors since backup found it successfully!
+                  setLoading(false);
+                  return;
+                }
+              } catch (fallbackError) {
+                console.error('OpenStreetMap fallback geocoding failed:', fallbackError);
+              }
+
               let friendlyMessage = 'Não foi possível localizar o endereço exato. Mostrando região central de Caraguatatuba.';
               
               if (status === 'REQUEST_DENIED' || retryStatus === 'REQUEST_DENIED') {
-                friendlyMessage = 'Erro na API: A "Geocoding API" não está ativada no seu console Google Cloud para esta chave. Por favor, ative-a no painel do Google Cloud.';
+                friendlyMessage = 'Aviso: Google Geocoding API está desativada ou restrita para esta chave no Google Cloud. Usando visualização padrão de Caraguatatuba.';
               } else if (status === 'ZERO_RESULTS' && retryStatus === 'ZERO_RESULTS') {
                 friendlyMessage = `Endereço "${cleanedAddress}" não encontrado pelo Google Maps em Caraguatatuba. Verifique a grafia ou número.`;
               } else if (status === 'OVER_QUERY_LIMIT' || retryStatus === 'OVER_QUERY_LIMIT') {
@@ -178,8 +217,8 @@ function MapContent({ address, familyName }: { address: string; familyName: stri
               setCoordinates(DEFAULT_CENTER);
               map.setCenter(DEFAULT_CENTER);
               map.setZoom(13);
+              setLoading(false);
             }
-            setLoading(false);
           });
         }
       }
