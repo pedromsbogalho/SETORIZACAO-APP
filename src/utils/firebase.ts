@@ -437,14 +437,16 @@ export async function updateAppUserApproval(
   uid: string, 
   approved: boolean, 
   role: 'ADMIN' | 'AM' | 'ASSISTANT' = 'ASSISTANT',
-  sector?: string
+  sector?: string,
+  sectors?: string[]
 ): Promise<void> {
   const path = `users/${uid}`;
   try {
     await updateDoc(doc(db, 'users', uid), {
       approved,
       role,
-      ...(sector !== undefined ? { sector } : {})
+      ...(sector !== undefined ? { sector } : {}),
+      ...(sectors !== undefined ? { sectors } : {})
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);

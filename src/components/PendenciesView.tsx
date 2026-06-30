@@ -14,7 +14,7 @@ interface PendenciesViewProps {
   onUpdateFamilies: (newFamilies: Family[]) => void;
   isDark: boolean;
   currentUserRole?: string;
-  currentUserSector?: string;
+  currentUserSectors?: string[];
 }
 
 interface SmartPendency {
@@ -27,23 +27,25 @@ interface SmartPendency {
   targetName: string;
 }
 
-export default function PendenciesView({ people, onUpdatePeople, families, onUpdateFamilies, isDark, currentUserRole, currentUserSector }: PendenciesViewProps) {
+export default function PendenciesView({ people, onUpdatePeople, families, onUpdateFamilies, isDark, currentUserRole, currentUserSectors }: PendenciesViewProps) {
   // If restricted to a sector, filter people and families first
   const filteredPeople = React.useMemo(() => {
-    if (currentUserRole === 'AM' && currentUserSector) {
-      return people.filter(p => (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase());
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+      return people.filter(p => sectorsUpper.includes((p.setor2 || '').toUpperCase()));
     }
     return people;
-  }, [people, currentUserRole, currentUserSector]);
+  }, [people, currentUserRole, currentUserSectors]);
 
   const filteredFamilies = React.useMemo(() => {
-    if (currentUserRole === 'AM' && currentUserSector) {
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
       return families.filter(f => 
-        people.some(p => p.idFamilia === f.id && (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase())
+        people.some(p => p.idFamilia === f.id && sectorsUpper.includes((p.setor2 || '').toUpperCase()))
       );
     }
     return families;
-  }, [families, people, currentUserRole, currentUserSector]);
+  }, [families, people, currentUserRole, currentUserSectors]);
 
   const [resolverPendency, setResolverPendency] = useState<SmartPendency | null>(null);
   const [resolveValue, setResolveValue] = useState('');

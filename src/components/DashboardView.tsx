@@ -13,7 +13,7 @@ interface DashboardViewProps {
   onNavigate: (tab: string) => void;
   isDark: boolean;
   currentUserRole?: string;
-  currentUserSector?: string;
+  currentUserSectors?: string[];
 }
 
 export default function DashboardView({ 
@@ -22,24 +22,26 @@ export default function DashboardView({
   onNavigate, 
   isDark,
   currentUserRole,
-  currentUserSector
+  currentUserSectors
 }: DashboardViewProps) {
   // If restricted to a sector, filter people and families first
   const people = React.useMemo(() => {
-    if (currentUserRole === 'AM' && currentUserSector) {
-      return rawPeople.filter(p => (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase());
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+      return rawPeople.filter(p => sectorsUpper.includes((p.setor2 || '').toUpperCase()));
     }
     return rawPeople;
-  }, [rawPeople, currentUserRole, currentUserSector]);
+  }, [rawPeople, currentUserRole, currentUserSectors]);
 
   const families = React.useMemo(() => {
-    if (currentUserRole === 'AM' && currentUserSector) {
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
       return rawFamilies.filter(f => 
-        rawPeople.some(p => p.idFamilia === f.id && (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase())
+        rawPeople.some(p => p.idFamilia === f.id && sectorsUpper.includes((p.setor2 || '').toUpperCase()))
       );
     }
     return rawFamilies;
-  }, [rawFamilies, rawPeople, currentUserRole, currentUserSector]);
+  }, [rawFamilies, rawPeople, currentUserRole, currentUserSectors]);
 
   // Stats calculations
   const totalMembros = people.filter(p => p.subtipoCadastro === 'MEMBRO').length;

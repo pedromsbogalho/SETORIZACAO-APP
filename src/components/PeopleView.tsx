@@ -15,7 +15,7 @@ interface PeopleViewProps {
   currentUserRole: 'ADMIN' | 'AM';
   currentAMName?: string;
   structure: JohreiCenterStructure;
-  currentUserSector?: string;
+  currentUserSectors?: string[];
 }
 
 export default function PeopleView({
@@ -25,7 +25,7 @@ export default function PeopleView({
   currentUserRole,
   currentAMName,
   structure,
-  currentUserSector
+  currentUserSectors
 }: PeopleViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL'); // Filters Ohikari vs other types
@@ -74,12 +74,17 @@ export default function PeopleView({
 
   // Get unique sectors list for filter
   const sectorsList = React.useMemo(() => {
-    const list = people
+    let list = people
       .filter(p => p.subtipoCadastro === 'MEMBRO')
       .map(p => p.setor2 || 'SEM SETOR')
       .filter(Boolean);
+
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+      list = list.filter(s => sectorsUpper.includes(s.toUpperCase()));
+    }
     return Array.from(new Set(list)).sort();
-  }, [people]);
+  }, [people, currentUserRole, currentUserSectors]);
 
   // Row limits & pagination
   const [rowsLimit, setRowsLimit] = useState<number>(10);
@@ -135,8 +140,9 @@ export default function PeopleView({
     
     // Find AMs in current user sector
     const relevantAMs = structure.amList.filter(am => {
-      if (currentUserRole === 'AM' && currentUserSector) {
-        return am.sector.toUpperCase() === currentUserSector.toUpperCase();
+      if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+        const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+        return sectorsUpper.includes(am.sector.toUpperCase());
       }
       return true;
     });
@@ -149,14 +155,15 @@ export default function PeopleView({
       setFormSetor(structure.amList[0].sector);
     }
 
-    if (currentUserRole === 'AM' && currentUserSector) {
-      setFormSetor(currentUserSector);
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      setFormSetor(currentUserSectors[0]);
     }
 
     // Default to first AF if available
     const relevantAFs = structure.afList.filter(af => {
-      if (currentUserRole === 'AM' && currentUserSector) {
-        return af.sector.toUpperCase() === currentUserSector.toUpperCase();
+      if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+        const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+        return sectorsUpper.includes(af.sector.toUpperCase());
       }
       return true;
     });
@@ -337,10 +344,17 @@ export default function PeopleView({
   // Filter ONLY Members
   let filtered = people.filter(p => p.subtipoCadastro === 'MEMBRO');
 
-  const activeSectorFilter = (currentUserRole === 'AM' && currentUserSector) ? currentUserSector : filterSector;
+  const hasUserSectors = currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0;
 
-  if (currentUserRole === 'AM' && currentUserSector) {
-    filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === currentUserSector.toUpperCase());
+  if (hasUserSectors) {
+    const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+    filtered = filtered.filter(p => sectorsUpper.includes((p.setor2 || 'SEM SETOR').toUpperCase()));
+    
+    if (filterSector !== 'ALL') {
+      filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === filterSector.toUpperCase());
+    }
+  } else if (filterSector !== 'ALL') {
+    filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === filterSector.toUpperCase());
   }
 
   // Filtro de Grau (tipoCadastro) removido: sempre mostra todos os membros.
@@ -348,10 +362,6 @@ export default function PeopleView({
 
   if (filterStatus !== 'ALL') {
     filtered = filtered.filter(p => p.statusAtual === filterStatus);
-  }
-
-  if (activeSectorFilter !== 'ALL' && !(currentUserRole === 'AM' && currentUserSector)) {
-    filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === activeSectorFilter.toUpperCase());
   }
 
   if (searchQuery.trim()) {
@@ -577,13 +587,17 @@ export default function PeopleView({
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Setor:</span>
               <select 
-                disabled={!!(currentUserRole === 'AM' && currentUserSector)}
-                value={currentUserRole === 'AM' && currentUserSector ? currentUserSector : filterSector}
+                value={filterSector}
                 onChange={(e) => { setFilterSector(e.target.value); setPageIndex(0); }}
-                className={`text-xs py-1.5 px-2.5 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none disabled:opacity-75`}
+                className={`text-xs py-1.5 px-2.5 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none`}
               >
-                {currentUserRole === 'AM' && currentUserSector ? (
-                  <option value={currentUserSector}>{currentUserSector}</option>
+                {currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0 ? (
+                  <>
+                    <option value="ALL">Todos os meus setores</option>
+                    {currentUserSectors.map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </>
                 ) : (
                   <>
                     <option value="ALL">Todos os Setores</option>
@@ -894,8 +908,9 @@ export default function PeopleView({
                     <option value="">Selecione um AM...</option>
                     {structure.amList
                       .filter(am => {
-                        if (currentUserRole === 'AM' && currentUserSector) {
-                          return am.sector.toUpperCase() === currentUserSector.toUpperCase();
+                        if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+                          const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+                          return sectorsUpper.includes(am.sector.toUpperCase());
                         }
                         return true;
                       })

@@ -12,7 +12,7 @@ interface JourneyViewProps {
   onUpdatePeople: (newPeople: Person[]) => void;
   isDark: boolean;
   currentUserRole?: string;
-  currentUserSector?: string;
+  currentUserSectors?: string[];
 }
 
 const JOURNEY_STEPS: JornadaEtapa[] = [
@@ -65,7 +65,7 @@ export function getJornadaMembro(person?: Person): JornadaMembro {
   };
 }
 
-export default function JourneyView({ people, onUpdatePeople, isDark, currentUserRole, currentUserSector }: JourneyViewProps) {
+export default function JourneyView({ people, onUpdatePeople, isDark, currentUserRole, currentUserSectors }: JourneyViewProps) {
   const [selectedPersonId, setSelectedPersonId] = useState<string>(people[0]?.id || '');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [activeTab, setActiveTab] = useState<'FREQUENTADOR' | 'MEMBRO'>('FREQUENTADOR');
@@ -129,6 +129,9 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
 
   // Select the person (fallback to filteredPeople[0] if current choice is filtered out)
   const selectedPerson = people.find(p => p.id === selectedPersonId) || filteredPeople[0] || people[0];
+
+  const userSectorsUpper = (currentUserSectors || []).map(s => s.toUpperCase());
+  const isAuthorizedForPerson = currentUserRole !== 'AM' || userSectorsUpper.length === 0 || !selectedPerson || !selectedPerson.setor2 || userSectorsUpper.includes(selectedPerson.setor2.toUpperCase());
 
   useEffect(() => {
     if (selectedPerson) {
@@ -447,7 +450,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   </div>
                 </div>
               </>
-            ) : currentUserRole === 'AM' && currentUserSector && selectedPerson.setor2 && selectedPerson.setor2.toUpperCase() !== currentUserSector.toUpperCase() ? (
+            ) : currentUserRole === 'AM' && !isAuthorizedForPerson ? (
               <div className="p-8 text-center border border-slate-200/60 dark:border-white/10 rounded-2xl bg-slate-50/50 dark:bg-zinc-900/50 space-y-4 max-w-lg mx-auto my-12 shadow-sm animate-fade-in">
                 <div className="p-3 bg-teal-500/10 text-teal-600 rounded-full w-fit mx-auto">
                   <Clock className="w-8 h-8" />
@@ -455,10 +458,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Acesso Restrito ao Setor</h3>
                   <p className="text-xs text-slate-600 dark:text-zinc-300">
-                    Pessoa pertencente ao setor: <span className="font-bold text-teal-600 dark:text-teal-400">{selectedPerson.setor2}</span>
+                    Pessoa pertencente ao setor: <span className="font-bold text-teal-600 dark:text-teal-400">{selectedPerson?.setor2}</span>
                   </p>
                   <p className="text-xxs text-slate-400 dark:text-zinc-400 leading-relaxed">
-                    Como assistente de ministro do setor <span className="font-bold">{currentUserSector}</span>, você pode acompanhar esta pessoa enquanto ela for frequentadora geral, mas o acompanhamento contínuo de membro é reservado para os responsáveis do setor dela.
+                    Como assistente de ministro dos setores <span className="font-bold">{(currentUserSectors || []).join(', ')}</span>, você pode acompanhar esta pessoa enquanto ela for frequentadora geral, mas o acompanhamento contínuo de membro é reservado para os responsáveis do setor dela.
                   </p>
                 </div>
               </div>

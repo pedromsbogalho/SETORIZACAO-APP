@@ -13,10 +13,10 @@ interface TreeViewProps {
   structure: JohreiCenterStructure;
   isDark: boolean;
   currentUserRole?: string;
-  currentUserSector?: string;
+  currentUserSectors?: string[];
 }
 
-export default function TreeView({ people, families, structure, isDark, currentUserRole, currentUserSector }: TreeViewProps) {
+export default function TreeView({ people, families, structure, isDark, currentUserRole, currentUserSectors }: TreeViewProps) {
   // Expanded states for Sectors, Bairros and Families
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [expandedBairros, setExpandedBairros] = useState<Record<string, boolean>>({});
@@ -66,8 +66,9 @@ export default function TreeView({ people, families, structure, isDark, currentU
   // Unique sector names list
   const sectorNames = Object.keys(sectors)
     .filter(s => {
-      if (currentUserRole === 'AM' && currentUserSector) {
-        return s.toUpperCase() === currentUserSector.toUpperCase();
+      if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+        const sectorsUpper = currentUserSectors.map(x => x.toUpperCase());
+        return sectorsUpper.includes(s.toUpperCase());
       }
       return true;
     })

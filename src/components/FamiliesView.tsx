@@ -14,10 +14,10 @@ interface FamiliesViewProps {
   people: Person[];
   isDark: boolean;
   currentUserRole?: string;
-  currentUserSector?: string;
+  currentUserSectors?: string[];
 }
 
-export default function FamiliesView({ families, onUpdateFamilies, people, isDark, currentUserRole, currentUserSector }: FamiliesViewProps) {
+export default function FamiliesView({ families, onUpdateFamilies, people, isDark, currentUserRole, currentUserSectors }: FamiliesViewProps) {
   const [selectedFamilyId, setSelectedFamilyId] = useState<string>(families[0]?.id || '');
   const [isAddFamilyOpen, setIsAddFamilyOpen] = useState(false);
 
@@ -72,8 +72,6 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
 
   // Filter and sort families
   const filteredAndSortedFamilies = useMemo(() => {
-    const activeSector = (currentUserRole === 'AM' && currentUserSector) ? currentUserSector.toUpperCase() : selectedSector;
-
     return families
       .filter(f => {
         // Text search: matches family name, ID, or address
@@ -84,9 +82,16 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
           f.endereco.toLowerCase().includes(term);
 
         // Sector filter
-        const matchesSector = 
-          activeSector === 'Todos' || 
-          (familySectorsMap[f.id] || []).includes(activeSector);
+        let matchesSector = false;
+        if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+          const userSectorsUpper = currentUserSectors.map(s => s.toUpperCase());
+          const famSectors = familySectorsMap[f.id] || [];
+          matchesSector = famSectors.some(s => userSectorsUpper.includes(s));
+        } else {
+          matchesSector = 
+            selectedSector === 'Todos' || 
+            (familySectorsMap[f.id] || []).includes(selectedSector.toUpperCase());
+        }
 
         // Neighborhood filter
         const matchesNeighborhood = 
@@ -99,7 +104,7 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
         const comparison = a.nome.localeCompare(b.nome, 'pt-BR');
         return sortOrder === 'asc' ? comparison : -comparison;
       });
-  }, [families, searchTerm, selectedSector, selectedNeighborhood, sortOrder, familySectorsMap, familyNeighborhoodsMap, currentUserRole, currentUserSector]);
+  }, [families, searchTerm, selectedSector, selectedNeighborhood, sortOrder, familySectorsMap, familyNeighborhoodsMap, currentUserRole, currentUserSectors]);
 
   const selectedFamily = filteredAndSortedFamilies.find(f => f.id === selectedFamilyId) || filteredAndSortedFamilies[0];
 
@@ -198,7 +203,7 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
           </div>
 
           {/* Clickable Sectors (Setores) Filter */}
-          {!(currentUserRole === 'AM' && currentUserSector) && (
+          {!(currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) && (
             <div className="space-y-1.5">
               <span className="block text-[9px] font-bold font-mono uppercase text-zinc-400 tracking-wider">
                 Filtrar por Setor (Clicável)

@@ -143,6 +143,7 @@ export interface AppUser {
   approved: boolean;
   requestDate: string;
   sector?: string; // Setor pelo qual o usuário é responsável
+  sectors?: string[]; // Setores pelos quais o usuário é responsável
 }
 
 export interface UserSession {

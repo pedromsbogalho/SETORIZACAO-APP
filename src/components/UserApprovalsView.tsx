@@ -23,6 +23,14 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [openSectorsUid, setOpenSectorsUid] = useState<string | null>(null);
+
+  const getUserSectors = (user: AppUser): string[] => {
+    if (user.sectors && Array.isArray(user.sectors)) {
+      return user.sectors;
+    }
+    return user.sector ? [user.sector] : [];
+  };
 
   const loadUsers = async () => {
     setLoading(true);
@@ -47,10 +55,10 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     loadUsers();
   }, []);
 
-  const handleToggleApproval = async (uid: string, currentApproved: boolean, role: UserRole, sector?: string) => {
+  const handleToggleApproval = async (uid: string, currentApproved: boolean, role: UserRole, sector?: string, sectors?: string[]) => {
     setActionLoadingId(uid);
     try {
-      await updateAppUserApproval(uid, !currentApproved, role, sector);
+      await updateAppUserApproval(uid, !currentApproved, role, sector, sectors);
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar status do usuário:", err);
@@ -60,10 +68,10 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     }
   };
 
-  const handleRoleChange = async (uid: string, approved: boolean, newRole: UserRole, sector?: string) => {
+  const handleRoleChange = async (uid: string, approved: boolean, newRole: UserRole, sector?: string, sectors?: string[]) => {
     setActionLoadingId(uid);
     try {
-      await updateAppUserApproval(uid, approved, newRole, sector);
+      await updateAppUserApproval(uid, approved, newRole, sector, sectors);
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar cargo do usuário:", err);
@@ -73,14 +81,15 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     }
   };
 
-  const handleSectorChange = async (uid: string, approved: boolean, role: UserRole, newSector: string) => {
+  const handleSectorsChange = async (uid: string, approved: boolean, role: UserRole, newSectors: string[]) => {
     setActionLoadingId(uid);
     try {
-      await updateAppUserApproval(uid, approved, role, newSector);
+      const primarySector = newSectors.length > 0 ? newSectors[0] : '';
+      await updateAppUserApproval(uid, approved, role, primarySector, newSectors);
       await loadUsers();
     } catch (err) {
-      console.error("Erro ao atualizar setor do usuário:", err);
-      alert("Erro ao atualizar setor do usuário.");
+      console.error("Erro ao atualizar setores do usuário:", err);
+      alert("Erro ao atualizar setores do usuário.");
     } finally {
       setActionLoadingId(null);
     }
@@ -191,7 +200,7 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
                           <select
                             disabled={actionLoadingId === user.uid}
                             value={user.role}
-                            onChange={(e) => handleRoleChange(user.uid, user.approved, e.target.value as UserRole, user.sector)}
+                            onChange={(e) => handleRoleChange(user.uid, user.approved, e.target.value as UserRole, user.sector, user.sectors)}
                             className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-teal-500 disabled:opacity-60 transition-colors"
                           >
                             <option value="ASSISTANT">Assistente</option>
@@ -206,19 +215,75 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
                         {isSelf ? (
                           <span className="text-slate-400 font-mono text-xxs italic">Geral (Todos)</span>
                         ) : (
-                          <select
-                            disabled={actionLoadingId === user.uid}
-                            value={user.sector || ''}
-                            onChange={(e) => handleSectorChange(user.uid, user.approved, user.role, e.target.value)}
-                            className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-teal-500 disabled:opacity-60 transition-colors"
-                          >
-                            <option value="">-- Geral (Todos) --</option>
-                            {AVAILABLE_SECTORS.map((sec) => (
-                              <option key={sec} value={sec}>
-                                {sec}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              disabled={actionLoadingId === user.uid}
+                              onClick={() => setOpenSectorsUid(openSectorsUid === user.uid ? null : user.uid)}
+                              className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-teal-500 disabled:opacity-60 transition-colors flex items-center justify-between gap-1.5 min-w-[150px] max-w-[200px] cursor-pointer"
+                            >
+                              <span className="truncate">
+                                {getUserSectors(user).length === 0 
+                                  ? 'Geral (Todos)' 
+                                  : getUserSectors(user).join(', ')}
+                              </span>
+                              <span className="text-[9px] text-slate-400 shrink-0">▼</span>
+                            </button>
+                            
+                            {openSectorsUid === user.uid && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-10" 
+                                  onClick={() => setOpenSectorsUid(null)}
+                                />
+                                <div className="absolute left-0 mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-lg py-2 px-1 z-20 max-h-60 overflow-y-auto">
+                                  <div className="px-2 py-1.5 border-b border-slate-100 mb-1.5 flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Setores</span>
+                                    {getUserSectors(user).length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleSectorsChange(user.uid, user.approved, user.role, []);
+                                        }}
+                                        className="text-[9px] text-teal-600 hover:text-teal-700 font-bold uppercase cursor-pointer"
+                                      >
+                                        Limpar
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    {AVAILABLE_SECTORS.map((sec) => {
+                                      const currentSectors = getUserSectors(user);
+                                      const isChecked = currentSectors.includes(sec);
+                                      return (
+                                        <label
+                                          key={sec}
+                                          className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer select-none transition-colors text-slate-700"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            disabled={actionLoadingId === user.uid}
+                                            onChange={() => {
+                                              let nextSectors: string[];
+                                              if (isChecked) {
+                                                nextSectors = currentSectors.filter(s => s !== sec);
+                                              } else {
+                                                nextSectors = [...currentSectors, sec];
+                                              }
+                                              handleSectorsChange(user.uid, user.approved, user.role, nextSectors);
+                                            }}
+                                            className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 w-3.5 h-3.5 cursor-pointer"
+                                          />
+                                          <span className="text-xs font-medium">{sec}</span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         )}
                       </td>
 
@@ -244,7 +309,7 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
                         ) : (
                           <button
                             disabled={actionLoadingId === user.uid}
-                            onClick={() => handleToggleApproval(user.uid, user.approved, user.role, user.sector)}
+                            onClick={() => handleToggleApproval(user.uid, user.approved, user.role, user.sector, user.sectors)}
                             className={`px-3 py-1.5 rounded-lg text-xxs font-bold transition-all uppercase cursor-pointer flex items-center gap-1.5 ml-auto shadow-xs ${
                               user.approved
                                 ? 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-100/50'

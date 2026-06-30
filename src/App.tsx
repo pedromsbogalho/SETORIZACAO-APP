@@ -1207,7 +1207,7 @@ export default function App() {
                 onNavigate={setActiveTab}
                 isDark={isDark}
                 currentUserRole={userRole}
-                currentUserSector={currentAppUser?.sector}
+                currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
@@ -1219,7 +1219,7 @@ export default function App() {
                 currentUserRole={userRole}
                 currentAMName={userRole === 'AM' ? currentAMName : undefined}
                 structure={structure}
-                currentUserSector={currentAppUser?.sector}
+                currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
@@ -1248,7 +1248,7 @@ export default function App() {
                 structure={structure}
                 isDark={isDark} 
                 currentUserRole={userRole}
-                currentUserSector={currentAppUser?.sector}
+                currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
@@ -1258,7 +1258,7 @@ export default function App() {
                 onUpdatePeople={handleUpdatePeople} 
                 isDark={isDark} 
                 currentUserRole={userRole}
-                currentUserSector={currentAppUser?.sector}
+                currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
@@ -1277,7 +1277,7 @@ export default function App() {
                 people={people} 
                 isDark={isDark} 
                 currentUserRole={userRole}
-                currentUserSector={currentAppUser?.sector}
+                currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
@@ -1298,7 +1298,7 @@ export default function App() {
                 onUpdateFamilies={handleUpdateFamilies}
                 isDark={isDark} 
                 currentUserRole={userRole}
-                currentUserSector={currentAppUser?.sector}
+                currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
