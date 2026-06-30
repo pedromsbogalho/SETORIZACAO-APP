@@ -289,7 +289,37 @@ export default function FrequentersView({
 
       const peopleMap = new Map(people.map(p => [p.id, p]));
       finalImported.forEach(imp => {
-        peopleMap.set(imp.id, imp);
+        const existing = peopleMap.get(imp.id);
+        if (existing) {
+          peopleMap.set(imp.id, {
+            ...existing,
+            ...imp,
+            // Preserve spiritual journey stage & dates if they already exist
+            jornadaEtapa: existing.jornadaEtapa || imp.jornadaEtapa,
+            jornadaDatas: {
+              ...imp.jornadaDatas,
+              ...existing.jornadaDatas
+            },
+            // Preserve course controls progress
+            cursoIniciacao: {
+              ...imp.cursoIniciacao,
+              ...existing.cursoIniciacao
+            },
+            cursoPosOutorga: {
+              aulas: {
+                ...imp.cursoPosOutorga?.aulas,
+                ...existing.cursoPosOutorga?.aulas
+              }
+            },
+            // Preserve WhatsApp groups status
+            gruposWhats: {
+              ...imp.gruposWhats,
+              ...existing.gruposWhats
+            }
+          });
+        } else {
+          peopleMap.set(imp.id, imp);
+        }
       });
 
       onUpdatePeople(Array.from(peopleMap.values()));
