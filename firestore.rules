@@ -50,6 +50,11 @@ service cloud.firestore {
     match /structures/{structureId} {
       allow read, write: if isApproved();
     }
+
+    match /logs/{logId} {
+      allow create: if isApproved();
+      allow read: if isAdmin();
+    }
   }
 }
 

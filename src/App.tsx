@@ -511,7 +511,7 @@ export default function App() {
     const deletedIds: string[] = [];
 
     // Mapeia o estado atual em memória para busca rápida
-    const currentPeopleMap = new Map(people.map(p => [p.id, p]));
+    const currentPeopleMap = new Map<string, Person>(people.map(p => [p.id, p]));
 
     // Procura por novos registros ou modificações
     enriched.forEach(p => {
@@ -531,13 +531,14 @@ export default function App() {
         }
       } else if (JSON.stringify(existing) !== JSON.stringify(p)) {
         changedPeople.push(p);
+        const existingPerson = existing as Person;
         const changes: string[] = [];
-        if (existing.nome !== p.nome) changes.push(`Nome alterado de "${existing.nome}" para "${p.nome}"`);
-        if (existing.statusAtual !== p.statusAtual) changes.push(`Status alterado de "${existing.statusAtual}" para "${p.statusAtual}"`);
-        if (existing.setor2 !== p.setor2) changes.push(`Setor alterado de "${existing.setor2}" para "${p.setor2}"`);
-        if (existing.subtipoCadastro !== p.subtipoCadastro) changes.push(`Tipo de cadastro alterado de "${existing.subtipoCadastro}" para "${p.subtipoCadastro}"`);
-        if (existing.am !== p.am) changes.push(`AM alterado de "${existing.am || 'Nenhum'}" para "${p.am || 'Nenhum'}"`);
-        if (existing.af2 !== p.af2) changes.push(`AF alterado de "${existing.af2 || 'Nenhum'}" para "${p.af2 || 'Nenhum'}"`);
+        if (existingPerson.nome !== p.nome) changes.push(`Nome alterado de "${existingPerson.nome}" para "${p.nome}"`);
+        if (existingPerson.statusAtual !== p.statusAtual) changes.push(`Status alterado de "${existingPerson.statusAtual}" para "${p.statusAtual}"`);
+        if (existingPerson.setor2 !== p.setor2) changes.push(`Setor alterado de "${existingPerson.setor2}" para "${p.setor2}"`);
+        if (existingPerson.subtipoCadastro !== p.subtipoCadastro) changes.push(`Tipo de cadastro alterado de "${existingPerson.subtipoCadastro}" para "${p.subtipoCadastro}"`);
+        if (existingPerson.am !== p.am) changes.push(`AM alterado de "${existingPerson.am || 'Nenhum'}" para "${p.am || 'Nenhum'}"`);
+        if (existingPerson.af2 !== p.af2) changes.push(`AF alterado de "${existingPerson.af2 || 'Nenhum'}" para "${p.af2 || 'Nenhum'}"`);
         
         const details = changes.length > 0 ? changes.join(', ') : 'Informações da ficha atualizadas';
         logActionToFirebase(
