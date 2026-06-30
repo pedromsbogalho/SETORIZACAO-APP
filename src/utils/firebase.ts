@@ -396,7 +396,7 @@ export async function createAppUserOrGet(uid: string, email: string, displayName
       requestDate: new Date().toISOString()
     };
 
-    await setDoc(doc(db, 'users', uid), newUser);
+    await withTimeout(setDoc(doc(db, 'users', uid), newUser), 2000);
     return newUser;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
@@ -433,12 +433,18 @@ export async function fetchAllAppUsers(): Promise<AppUser[]> {
   }
 }
 
-export async function updateAppUserApproval(uid: string, approved: boolean, role: 'ADMIN' | 'AM' | 'ASSISTANT' = 'ASSISTANT'): Promise<void> {
+export async function updateAppUserApproval(
+  uid: string, 
+  approved: boolean, 
+  role: 'ADMIN' | 'AM' | 'ASSISTANT' = 'ASSISTANT',
+  sector?: string
+): Promise<void> {
   const path = `users/${uid}`;
   try {
     await updateDoc(doc(db, 'users', uid), {
       approved,
-      role
+      role,
+      ...(sector !== undefined ? { sector } : {})
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);

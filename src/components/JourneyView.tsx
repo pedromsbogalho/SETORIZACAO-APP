@@ -11,6 +11,8 @@ interface JourneyViewProps {
   people: Person[];
   onUpdatePeople: (newPeople: Person[]) => void;
   isDark: boolean;
+  currentUserRole?: string;
+  currentUserSector?: string;
 }
 
 const JOURNEY_STEPS: JornadaEtapa[] = [
@@ -63,7 +65,7 @@ export function getJornadaMembro(person?: Person): JornadaMembro {
   };
 }
 
-export default function JourneyView({ people, onUpdatePeople, isDark }: JourneyViewProps) {
+export default function JourneyView({ people, onUpdatePeople, isDark, currentUserRole, currentUserSector }: JourneyViewProps) {
   const [selectedPersonId, setSelectedPersonId] = useState<string>(people[0]?.id || '');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [activeTab, setActiveTab] = useState<'FREQUENTADOR' | 'MEMBRO'>('FREQUENTADOR');
@@ -133,6 +135,14 @@ export default function JourneyView({ people, onUpdatePeople, isDark }: JourneyV
       setActiveTab(selectedPerson.subtipoCadastro);
     }
   }, [selectedPerson?.id]);
+
+  const hasOhikari = !!(selectedPerson && selectedPerson.jornadaDatas && selectedPerson.jornadaDatas['Recebe Ohikari']);
+
+  useEffect(() => {
+    if (!hasOhikari && activeTab === 'MEMBRO') {
+      setActiveTab('FREQUENTADOR');
+    }
+  }, [hasOhikari, activeTab]);
 
   const handleUpdateJornadaMembro = (updatedField: Partial<JornadaMembro>) => {
     if (!selectedPerson) return;
@@ -352,17 +362,19 @@ export default function JourneyView({ people, onUpdatePeople, isDark }: JourneyV
                 <Clock className="w-3.5 h-3.5" />
                 Frequentador
               </button>
-              <button
-                onClick={() => setActiveTab('MEMBRO')}
-                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase flex items-center justify-center gap-2 cursor-pointer ${
-                  activeTab === 'MEMBRO'
-                    ? 'bg-teal-600 text-white shadow-xs'
-                    : 'text-teal-600/80 dark:text-teal-400/80 hover:text-teal-600 dark:hover:text-teal-300'
-                }`}
-              >
-                <Award className="w-3.5 h-3.5" />
-                Membro (Acomp. Contínuo)
-              </button>
+              {hasOhikari && (
+                <button
+                  onClick={() => setActiveTab('MEMBRO')}
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase flex items-center justify-center gap-2 cursor-pointer ${
+                    activeTab === 'MEMBRO'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'text-teal-600/80 dark:text-teal-400/80 hover:text-teal-600 dark:hover:text-teal-300'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  Membro (Acomp. Contínuo)
+                </button>
+              )}
             </div>
 
             {activeTab === 'FREQUENTADOR' ? (
@@ -435,6 +447,21 @@ export default function JourneyView({ people, onUpdatePeople, isDark }: JourneyV
                   </div>
                 </div>
               </>
+            ) : currentUserRole === 'AM' && currentUserSector && selectedPerson.setor2 && selectedPerson.setor2.toUpperCase() !== currentUserSector.toUpperCase() ? (
+              <div className="p-8 text-center border border-slate-200/60 dark:border-white/10 rounded-2xl bg-slate-50/50 dark:bg-zinc-900/50 space-y-4 max-w-lg mx-auto my-12 shadow-sm animate-fade-in">
+                <div className="p-3 bg-teal-500/10 text-teal-600 rounded-full w-fit mx-auto">
+                  <Clock className="w-8 h-8" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Acesso Restrito ao Setor</h3>
+                  <p className="text-xs text-slate-600 dark:text-zinc-300">
+                    Pessoa pertencente ao setor: <span className="font-bold text-teal-600 dark:text-teal-400">{selectedPerson.setor2}</span>
+                  </p>
+                  <p className="text-xxs text-slate-400 dark:text-zinc-400 leading-relaxed">
+                    Como assistente de ministro do setor <span className="font-bold">{currentUserSector}</span>, você pode acompanhar esta pessoa enquanto ela for frequentadora geral, mas o acompanhamento contínuo de membro é reservado para os responsáveis do setor dela.
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="space-y-6">
                 {/* Banner / Info */}

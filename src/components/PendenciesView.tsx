@@ -13,6 +13,8 @@ interface PendenciesViewProps {
   families: Family[];
   onUpdateFamilies: (newFamilies: Family[]) => void;
   isDark: boolean;
+  currentUserRole?: string;
+  currentUserSector?: string;
 }
 
 interface SmartPendency {
@@ -25,13 +27,30 @@ interface SmartPendency {
   targetName: string;
 }
 
-export default function PendenciesView({ people, onUpdatePeople, families, onUpdateFamilies, isDark }: PendenciesViewProps) {
+export default function PendenciesView({ people, onUpdatePeople, families, onUpdateFamilies, isDark, currentUserRole, currentUserSector }: PendenciesViewProps) {
+  // If restricted to a sector, filter people and families first
+  const filteredPeople = React.useMemo(() => {
+    if (currentUserRole === 'AM' && currentUserSector) {
+      return people.filter(p => (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase());
+    }
+    return people;
+  }, [people, currentUserRole, currentUserSector]);
+
+  const filteredFamilies = React.useMemo(() => {
+    if (currentUserRole === 'AM' && currentUserSector) {
+      return families.filter(f => 
+        people.some(p => p.idFamilia === f.id && (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase())
+      );
+    }
+    return families;
+  }, [families, people, currentUserRole, currentUserSector]);
+
   const [resolverPendency, setResolverPendency] = useState<SmartPendency | null>(null);
   const [resolveValue, setResolveValue] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
 
   // 1. Detect: Pessoa recebeu Ohikari mas não concluiu Pós-Outorga
-  const outorgaPendencies: SmartPendency[] = people
+  const outorgaPendencies: SmartPendency[] = filteredPeople
     .filter(p => p.tipoCadastro === 'Ohikari' && !Object.values(p.cursoPosOutorga.aulas).every(v => v === 'Concluido'))
     .map(p => {
       const completedCount = Object.values(p.cursoPosOutorga.aulas).filter(v => v === 'Concluido').length;
@@ -47,7 +66,7 @@ export default function PendenciesView({ people, onUpdatePeople, families, onUpd
     });
 
   // 2. Detect: Pessoa ingressou mas ainda não entrou nos grupos do Whats
-  const whatsPendencies: SmartPendency[] = people
+  const whatsPendencies: SmartPendency[] = filteredPeople
     .filter(p => p.jornadaEtapa !== 'Primeiro atendimento' && (!p.gruposWhats.grupoSetor || !p.gruposWhats.grupoGeral))
     .map(p => ({
       id: `p-whats-${p.id}`,
@@ -60,7 +79,7 @@ export default function PendenciesView({ people, onUpdatePeople, families, onUpd
     }));
 
   // 5. Detect: Pessoa cadastrada sem setor
-  const noSectorPendencies: SmartPendency[] = people
+  const noSectorPendencies: SmartPendency[] = filteredPeople
     .filter(p => !p.setor2)
     .map(p => ({
       id: `p-sector-${p.id}`,
@@ -73,7 +92,7 @@ export default function PendenciesView({ people, onUpdatePeople, families, onUpd
     }));
 
   // 6. Detect: Pessoa sem Assistente de Família (AF2)
-  const noAFPendencies: SmartPendency[] = people
+  const noAFPendencies: SmartPendency[] = filteredPeople
     .filter(p => !p.af2)
     .map(p => ({
       id: `p-af-${p.id}`,
@@ -86,7 +105,7 @@ export default function PendenciesView({ people, onUpdatePeople, families, onUpd
     }));
 
   // 7. Detect: Pessoa sem telefone cadastrado
-  const noPhonePendencies: SmartPendency[] = people
+  const noPhonePendencies: SmartPendency[] = filteredPeople
     .filter(p => !p.celularPrincipal)
     .map(p => ({
       id: `p-phone-${p.id}`,

@@ -7,6 +7,18 @@ interface UserApprovalsViewProps {
   currentUserUid: string;
 }
 
+const AVAILABLE_SECTORS = [
+  'CENTRO-NORTE',
+  'SUL',
+  'ILHA BELA',
+  'SÃO SEBASTIÃO',
+  'INDAIÁ-SERRA',
+  'LESTE',
+  'OHIKARI',
+  'OUTROS',
+  'SEM SETOR'
+];
+
 export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewProps) {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -35,10 +47,10 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     loadUsers();
   }, []);
 
-  const handleToggleApproval = async (uid: string, currentApproved: boolean, role: UserRole) => {
+  const handleToggleApproval = async (uid: string, currentApproved: boolean, role: UserRole, sector?: string) => {
     setActionLoadingId(uid);
     try {
-      await updateAppUserApproval(uid, !currentApproved, role);
+      await updateAppUserApproval(uid, !currentApproved, role, sector);
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar status do usuário:", err);
@@ -48,14 +60,27 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     }
   };
 
-  const handleRoleChange = async (uid: string, approved: boolean, newRole: UserRole) => {
+  const handleRoleChange = async (uid: string, approved: boolean, newRole: UserRole, sector?: string) => {
     setActionLoadingId(uid);
     try {
-      await updateAppUserApproval(uid, approved, newRole);
+      await updateAppUserApproval(uid, approved, newRole, sector);
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar cargo do usuário:", err);
       alert("Erro ao atualizar cargo do usuário.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleSectorChange = async (uid: string, approved: boolean, role: UserRole, newSector: string) => {
+    setActionLoadingId(uid);
+    try {
+      await updateAppUserApproval(uid, approved, role, newSector);
+      await loadUsers();
+    } catch (err) {
+      console.error("Erro ao atualizar setor do usuário:", err);
+      alert("Erro ao atualizar setor do usuário.");
     } finally {
       setActionLoadingId(null);
     }
@@ -70,7 +95,7 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
             Controle de Acesso
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Gerencie os assistentes e ministros que solicitaram acesso a esta unidade compartilhada do Johrei Center.
+            Gerencie os assistentes e ministros que solicitaram acesso a esta unidade compartilhada do Johrei Center e defina seus setores de responsabilidade.
           </p>
         </div>
         <button
@@ -108,6 +133,7 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
                   <th className="px-5 py-3">Usuário</th>
                   <th className="px-5 py-3">Solicitado em</th>
                   <th className="px-5 py-3">Nível de Acesso</th>
+                  <th className="px-5 py-3">Setor Responsável</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3 text-right">Ações</th>
                 </tr>
@@ -165,12 +191,33 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
                           <select
                             disabled={actionLoadingId === user.uid}
                             value={user.role}
-                            onChange={(e) => handleRoleChange(user.uid, user.approved, e.target.value as UserRole)}
+                            onChange={(e) => handleRoleChange(user.uid, user.approved, e.target.value as UserRole, user.sector)}
                             className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-teal-500 disabled:opacity-60 transition-colors"
                           >
                             <option value="ASSISTANT">Assistente</option>
                             <option value="AM">Assistente de Ministro (AM)</option>
                             <option value="ADMIN">Administrador (ADMIN)</option>
+                          </select>
+                        )}
+                      </td>
+
+                      {/* Sector selection dropdown */}
+                      <td className="px-5 py-4">
+                        {isSelf ? (
+                          <span className="text-slate-400 font-mono text-xxs italic">Geral (Todos)</span>
+                        ) : (
+                          <select
+                            disabled={actionLoadingId === user.uid}
+                            value={user.sector || ''}
+                            onChange={(e) => handleSectorChange(user.uid, user.approved, user.role, e.target.value)}
+                            className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-teal-500 disabled:opacity-60 transition-colors"
+                          >
+                            <option value="">-- Geral (Todos) --</option>
+                            {AVAILABLE_SECTORS.map((sec) => (
+                              <option key={sec} value={sec}>
+                                {sec}
+                              </option>
+                            ))}
                           </select>
                         )}
                       </td>
@@ -197,7 +244,7 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
                         ) : (
                           <button
                             disabled={actionLoadingId === user.uid}
-                            onClick={() => handleToggleApproval(user.uid, user.approved, user.role)}
+                            onClick={() => handleToggleApproval(user.uid, user.approved, user.role, user.sector)}
                             className={`px-3 py-1.5 rounded-lg text-xxs font-bold transition-all uppercase cursor-pointer flex items-center gap-1.5 ml-auto shadow-xs ${
                               user.approved
                                 ? 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-100/50'

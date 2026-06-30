@@ -12,9 +12,11 @@ interface TreeViewProps {
   families: Family[];
   structure: JohreiCenterStructure;
   isDark: boolean;
+  currentUserRole?: string;
+  currentUserSector?: string;
 }
 
-export default function TreeView({ people, families, structure, isDark }: TreeViewProps) {
+export default function TreeView({ people, families, structure, isDark, currentUserRole, currentUserSector }: TreeViewProps) {
   // Expanded states for Sectors, Bairros and Families
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [expandedBairros, setExpandedBairros] = useState<Record<string, boolean>>({});
@@ -62,7 +64,14 @@ export default function TreeView({ people, families, structure, isDark }: TreeVi
   });
 
   // Unique sector names list
-  const sectorNames = Object.keys(sectors).sort();
+  const sectorNames = Object.keys(sectors)
+    .filter(s => {
+      if (currentUserRole === 'AM' && currentUserSector) {
+        return s.toUpperCase() === currentUserSector.toUpperCase();
+      }
+      return true;
+    })
+    .sort();
 
   return (
     <div className="space-y-6">

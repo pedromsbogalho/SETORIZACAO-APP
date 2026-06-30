@@ -13,9 +13,11 @@ interface FamiliesViewProps {
   onUpdateFamilies: (newFamilies: Family[]) => void;
   people: Person[];
   isDark: boolean;
+  currentUserRole?: string;
+  currentUserSector?: string;
 }
 
-export default function FamiliesView({ families, onUpdateFamilies, people, isDark }: FamiliesViewProps) {
+export default function FamiliesView({ families, onUpdateFamilies, people, isDark, currentUserRole, currentUserSector }: FamiliesViewProps) {
   const [selectedFamilyId, setSelectedFamilyId] = useState<string>(families[0]?.id || '');
   const [isAddFamilyOpen, setIsAddFamilyOpen] = useState(false);
 
@@ -70,6 +72,8 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
 
   // Filter and sort families
   const filteredAndSortedFamilies = useMemo(() => {
+    const activeSector = (currentUserRole === 'AM' && currentUserSector) ? currentUserSector.toUpperCase() : selectedSector;
+
     return families
       .filter(f => {
         // Text search: matches family name, ID, or address
@@ -81,8 +85,8 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
 
         // Sector filter
         const matchesSector = 
-          selectedSector === 'Todos' || 
-          (familySectorsMap[f.id] || []).includes(selectedSector);
+          activeSector === 'Todos' || 
+          (familySectorsMap[f.id] || []).includes(activeSector);
 
         // Neighborhood filter
         const matchesNeighborhood = 
@@ -95,7 +99,7 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
         const comparison = a.nome.localeCompare(b.nome, 'pt-BR');
         return sortOrder === 'asc' ? comparison : -comparison;
       });
-  }, [families, searchTerm, selectedSector, selectedNeighborhood, sortOrder, familySectorsMap, familyNeighborhoodsMap]);
+  }, [families, searchTerm, selectedSector, selectedNeighborhood, sortOrder, familySectorsMap, familyNeighborhoodsMap, currentUserRole, currentUserSector]);
 
   const selectedFamily = filteredAndSortedFamilies.find(f => f.id === selectedFamilyId) || filteredAndSortedFamilies[0];
 
@@ -194,40 +198,42 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
           </div>
 
           {/* Clickable Sectors (Setores) Filter */}
-          <div className="space-y-1.5">
-            <span className="block text-[9px] font-bold font-mono uppercase text-zinc-400 tracking-wider">
-              Filtrar por Setor (Clicável)
-            </span>
-            <div className="flex flex-row md:flex-wrap gap-1 overflow-x-auto md:overflow-x-visible pb-1.5 max-w-full scrollbar-none snap-x">
-              <button
-                onClick={() => setSelectedSector('Todos')}
-                className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase shrink-0 snap-start ${
-                  selectedSector === 'Todos'
-                    ? 'bg-teal-600 text-white'
-                    : isDark
-                      ? 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                Todos
-              </button>
-              {allSectors.map(sec => (
+          {!(currentUserRole === 'AM' && currentUserSector) && (
+            <div className="space-y-1.5">
+              <span className="block text-[9px] font-bold font-mono uppercase text-zinc-400 tracking-wider">
+                Filtrar por Setor (Clicável)
+              </span>
+              <div className="flex flex-row md:flex-wrap gap-1 overflow-x-auto md:overflow-x-visible pb-1.5 max-w-full scrollbar-none snap-x">
                 <button
-                  key={sec}
-                  onClick={() => setSelectedSector(sec)}
+                  onClick={() => setSelectedSector('Todos')}
                   className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase shrink-0 snap-start ${
-                    selectedSector === sec
+                    selectedSector === 'Todos'
                       ? 'bg-teal-600 text-white'
                       : isDark
                         ? 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {sec}
+                  Todos
                 </button>
-              ))}
+                {allSectors.map(sec => (
+                  <button
+                    key={sec}
+                    onClick={() => setSelectedSector(sec)}
+                    className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer uppercase shrink-0 snap-start ${
+                      selectedSector === sec
+                        ? 'bg-teal-600 text-white'
+                        : isDark
+                          ? 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {sec}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Alphabetical Neighborhood (Bairro) Filter (Lista A-Z em Dropdown) */}
           <div className="space-y-1.5">

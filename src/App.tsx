@@ -1206,6 +1206,8 @@ export default function App() {
                 families={families} 
                 onNavigate={setActiveTab}
                 isDark={isDark}
+                currentUserRole={userRole}
+                currentUserSector={currentAppUser?.sector}
               />
             )}
 
@@ -1217,6 +1219,7 @@ export default function App() {
                 currentUserRole={userRole}
                 currentAMName={userRole === 'AM' ? currentAMName : undefined}
                 structure={structure}
+                currentUserSector={currentAppUser?.sector}
               />
             )}
 
@@ -1244,6 +1247,8 @@ export default function App() {
                 families={families} 
                 structure={structure}
                 isDark={isDark} 
+                currentUserRole={userRole}
+                currentUserSector={currentAppUser?.sector}
               />
             )}
 
@@ -1252,6 +1257,8 @@ export default function App() {
                 people={people} 
                 onUpdatePeople={handleUpdatePeople} 
                 isDark={isDark} 
+                currentUserRole={userRole}
+                currentUserSector={currentAppUser?.sector}
               />
             )}
 
@@ -1269,6 +1276,8 @@ export default function App() {
                 onUpdateFamilies={handleUpdateFamilies}
                 people={people} 
                 isDark={isDark} 
+                currentUserRole={userRole}
+                currentUserSector={currentAppUser?.sector}
               />
             )}
 
@@ -1288,6 +1297,8 @@ export default function App() {
                 families={families} 
                 onUpdateFamilies={handleUpdateFamilies}
                 isDark={isDark} 
+                currentUserRole={userRole}
+                currentUserSector={currentAppUser?.sector}
               />
             )}
 

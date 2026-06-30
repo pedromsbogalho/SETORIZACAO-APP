@@ -15,6 +15,7 @@ interface PeopleViewProps {
   currentUserRole: 'ADMIN' | 'AM';
   currentAMName?: string;
   structure: JohreiCenterStructure;
+  currentUserSector?: string;
 }
 
 export default function PeopleView({
@@ -23,11 +24,13 @@ export default function PeopleView({
   isDark,
   currentUserRole,
   currentAMName,
-  structure
+  structure,
+  currentUserSector
 }: PeopleViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL'); // Filters Ohikari vs other types
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterSector, setFilterSector] = useState<string>('ALL');
   const [sortField, setSortField] = useState<string>('nome');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -35,6 +38,48 @@ export default function PeopleView({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Column resizing state (initial widths for columns)
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    id: 110,
+    nome: 260,
+    tempoMembro: 160,
+    setor: 180,
+    bairro: 180,
+    celular: 140,
+    acoes: 100
+  });
+
+  const handleMouseDown = (e: React.MouseEvent, colKey: string) => {
+    e.preventDefault();
+    const startX = e.pageX;
+    const startWidth = colWidths[colKey] || 120;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(60, startWidth + (moveEvent.pageX - startX));
+      setColWidths(prev => ({
+        ...prev,
+        [colKey]: newWidth
+      }));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Get unique sectors list for filter
+  const sectorsList = React.useMemo(() => {
+    const list = people
+      .filter(p => p.subtipoCadastro === 'MEMBRO')
+      .map(p => p.setor2 || 'SEM SETOR')
+      .filter(Boolean);
+    return Array.from(new Set(list)).sort();
+  }, [people]);
 
   // Row limits & pagination
   const [rowsLimit, setRowsLimit] = useState<number>(10);
@@ -87,15 +132,41 @@ export default function PeopleView({
   const handleOpenAdd = () => {
     resetForm();
     setFormId(String(Math.floor(Math.random() * 900000) + 100000));
-    // Default to first AM if available
-    if (structure.amList.length > 0) {
+    
+    // Find AMs in current user sector
+    const relevantAMs = structure.amList.filter(am => {
+      if (currentUserRole === 'AM' && currentUserSector) {
+        return am.sector.toUpperCase() === currentUserSector.toUpperCase();
+      }
+      return true;
+    });
+
+    if (relevantAMs.length > 0) {
+      setFormAM(relevantAMs[0].name);
+      setFormSetor(relevantAMs[0].sector);
+    } else if (structure.amList.length > 0) {
       setFormAM(structure.amList[0].name);
       setFormSetor(structure.amList[0].sector);
     }
+
+    if (currentUserRole === 'AM' && currentUserSector) {
+      setFormSetor(currentUserSector);
+    }
+
     // Default to first AF if available
-    if (structure.afList.length > 0) {
+    const relevantAFs = structure.afList.filter(af => {
+      if (currentUserRole === 'AM' && currentUserSector) {
+        return af.sector.toUpperCase() === currentUserSector.toUpperCase();
+      }
+      return true;
+    });
+
+    if (relevantAFs.length > 0) {
+      setFormAF(relevantAFs[0].name);
+    } else if (structure.afList.length > 0) {
       setFormAF(structure.afList[0].name);
     }
+
     setIsModalOpen(true);
   };
 
@@ -266,8 +337,10 @@ export default function PeopleView({
   // Filter ONLY Members
   let filtered = people.filter(p => p.subtipoCadastro === 'MEMBRO');
 
-  if (currentUserRole === 'AM' && currentAMName) {
-    filtered = filtered.filter(p => p.am === currentAMName || p.am === '');
+  const activeSectorFilter = (currentUserRole === 'AM' && currentUserSector) ? currentUserSector : filterSector;
+
+  if (currentUserRole === 'AM' && currentUserSector) {
+    filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === currentUserSector.toUpperCase());
   }
 
   // Filtro de Grau (tipoCadastro) removido: sempre mostra todos os membros.
@@ -275,6 +348,10 @@ export default function PeopleView({
 
   if (filterStatus !== 'ALL') {
     filtered = filtered.filter(p => p.statusAtual === filterStatus);
+  }
+
+  if (activeSectorFilter !== 'ALL' && !(currentUserRole === 'AM' && currentUserSector)) {
+    filtered = filtered.filter(p => (p.setor2 || 'SEM SETOR').toUpperCase() === activeSectorFilter.toUpperCase());
   }
 
   if (searchQuery.trim()) {
@@ -496,29 +573,25 @@ export default function PeopleView({
               </select>
             </div>
 
-            {/* Sorting selection */}
+            {/* Sector filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Ordenar:</span>
+              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Setor:</span>
               <select 
-                value={`${sortField}-${sortOrder}`}
-                onChange={(e) => {
-                  const [field, order] = e.target.value.split('-');
-                  setSortField(field);
-                  setSortOrder(order as 'asc' | 'desc');
-                  setPageIndex(0);
-                }}
-                className={`text-xs py-1.5 px-2.5 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none`}
+                disabled={!!(currentUserRole === 'AM' && currentUserSector)}
+                value={currentUserRole === 'AM' && currentUserSector ? currentUserSector : filterSector}
+                onChange={(e) => { setFilterSector(e.target.value); setPageIndex(0); }}
+                className={`text-xs py-1.5 px-2.5 rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white/60 border-slate-200 text-slate-700'} focus:outline-none disabled:opacity-75`}
               >
-                <option value="nome-asc">Nome (A-Z)</option>
-                <option value="nome-desc">Nome (Z-A)</option>
-                <option value="nascimento-asc">Nasc. (Mais Antigo)</option>
-                <option value="nascimento-desc">Nasc. (Mais Recente)</option>
-                <option value="idade-asc">Idade (Menor para Maior)</option>
-                <option value="idade-desc">Idade (Maior para Menor)</option>
-                <option value="id-asc">Código (Crescente)</option>
-                <option value="id-desc">Código (Decrescente)</option>
-                <option value="setor2-asc">Setor (A-Z)</option>
-                <option value="bairroAjustado-asc">Bairro (A-Z)</option>
+                {currentUserRole === 'AM' && currentUserSector ? (
+                  <option value={currentUserSector}>{currentUserSector}</option>
+                ) : (
+                  <>
+                    <option value="ALL">Todos os Setores</option>
+                    {sectorsList.map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </>
+                )}
               </select>
             </div>
 
@@ -548,55 +621,100 @@ export default function PeopleView({
               <tr className={`text-[10px] font-mono uppercase tracking-wider ${isDark ? 'bg-zinc-950/40 text-zinc-400' : 'bg-slate-100/40 text-slate-500'} border-b border-slate-200/40 dark:border-white/5`}>
                 <th 
                   onClick={() => handleSort('id')} 
-                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.id, minWidth: colWidths.id }}
                 >
                   <div className="flex items-center gap-1">
                     Código {sortField === 'id' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'id')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
                 </th>
                 <th 
                   onClick={() => handleSort('nome')} 
-                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.nome, minWidth: colWidths.nome }}
                 >
                   <div className="flex items-center gap-1">
                     Nome Completo {sortField === 'nome' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'nome')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
                 </th>
                 <th 
                   onClick={() => handleSort('tempoMembro')}
-                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.tempoMembro, minWidth: colWidths.tempoMembro }}
                 >
                   <div className="flex items-center gap-1">
                     Tempo de Membro {sortField === 'tempoMembro' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'tempoMembro')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
                 </th>
-
 
                 <th 
                   onClick={() => handleSort('setor2')} 
-                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.setor, minWidth: colWidths.setor }}
                 >
                   <div className="flex items-center gap-1">
                     Setor / AM {sortField === 'setor2' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'setor')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
                 </th>
                 <th 
                   onClick={() => handleSort('bairroAjustado')} 
-                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.bairro, minWidth: colWidths.bairro }}
                 >
                   <div className="flex items-center gap-1">
                     Bairro / Família {sortField === 'bairroAjustado' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'bairro')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
                 </th>
                 <th 
                   onClick={() => handleSort('celularPrincipal')} 
-                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
+                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
+                  style={{ width: colWidths.celular, minWidth: colWidths.celular }}
                 >
                   <div className="flex items-center gap-1">
                     Celular {sortField === 'celularPrincipal' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                   </div>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'celular')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
                 </th>
-                <th className="py-3.5 px-4 font-bold text-right select-none">Ações</th>
+                <th 
+                  className="relative py-3.5 px-4 font-bold text-right select-none group"
+                  style={{ width: colWidths.acoes, minWidth: colWidths.acoes }}
+                >
+                  Ações
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => handleMouseDown(e, 'acoes')}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
+                  />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs">
@@ -774,9 +892,16 @@ export default function PeopleView({
                     className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
                   >
                     <option value="">Selecione um AM...</option>
-                    {structure.amList.map(am => (
-                      <option key={am.id} value={am.name}>{am.name}</option>
-                    ))}
+                    {structure.amList
+                      .filter(am => {
+                        if (currentUserRole === 'AM' && currentUserSector) {
+                          return am.sector.toUpperCase() === currentUserSector.toUpperCase();
+                        }
+                        return true;
+                      })
+                      .map(am => (
+                        <option key={am.id} value={am.name}>{am.name}</option>
+                      ))}
                   </select>
                 </div>
 

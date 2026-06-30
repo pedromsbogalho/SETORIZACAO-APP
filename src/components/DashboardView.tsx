@@ -12,9 +12,35 @@ interface DashboardViewProps {
   families: Family[];
   onNavigate: (tab: string) => void;
   isDark: boolean;
+  currentUserRole?: string;
+  currentUserSector?: string;
 }
 
-export default function DashboardView({ people, families, onNavigate, isDark }: DashboardViewProps) {
+export default function DashboardView({ 
+  people: rawPeople, 
+  families: rawFamilies, 
+  onNavigate, 
+  isDark,
+  currentUserRole,
+  currentUserSector
+}: DashboardViewProps) {
+  // If restricted to a sector, filter people and families first
+  const people = React.useMemo(() => {
+    if (currentUserRole === 'AM' && currentUserSector) {
+      return rawPeople.filter(p => (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase());
+    }
+    return rawPeople;
+  }, [rawPeople, currentUserRole, currentUserSector]);
+
+  const families = React.useMemo(() => {
+    if (currentUserRole === 'AM' && currentUserSector) {
+      return rawFamilies.filter(f => 
+        rawPeople.some(p => p.idFamilia === f.id && (p.setor2 || '').toUpperCase() === currentUserSector.toUpperCase())
+      );
+    }
+    return rawFamilies;
+  }, [rawFamilies, rawPeople, currentUserRole, currentUserSector]);
+
   // Stats calculations
   const totalMembros = people.filter(p => p.subtipoCadastro === 'MEMBRO').length;
   const membrosAtivos = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.statusAtual === 'ATIVO').length;
