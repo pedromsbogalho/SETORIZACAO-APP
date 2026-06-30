@@ -210,6 +210,10 @@ export default function PeopleView({
   };
 
   const handleDelete = (id: string) => {
+    if (currentUserRole === 'AM') {
+      alert('Assistentes de ministro não têm permissão para excluir membros.');
+      return;
+    }
     if (confirm('Tem certeza que deseja excluir este membro do cadastro?')) {
       onUpdatePeople(people.filter(p => p.id !== id));
     }
@@ -784,12 +788,14 @@ export default function PeopleView({
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                        <button 
-                          onClick={() => handleDelete(person.id)}
-                          className="p-1.5 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {currentUserRole !== 'AM' && (
+                          <button 
+                            onClick={() => handleDelete(person.id)}
+                            className="p-1.5 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

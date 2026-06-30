@@ -28,7 +28,7 @@ import {
   User
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Person, Family, JohreiCenterStructure, AppUser } from '../types';
+import { Person, Family, JohreiCenterStructure, AppUser, ActionLog } from '../types';
 
 // Load config from environment variables (useful for production) or fallback to local JSON config
 const metaEnv = (import.meta as any).env || {};
@@ -452,4 +452,49 @@ export async function updateAppUserApproval(
     handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
+
+export async function logActionToFirebase(
+  userId: string,
+  userEmail: string,
+  userName: string | undefined,
+  action: string,
+  details: string,
+  targetId?: string,
+  targetName?: string
+): Promise<void> {
+  const id = `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const path = `logs/${id}`;
+  const logEntry: ActionLog = {
+    id,
+    userId,
+    userEmail,
+    userName: userName || userEmail.split('@')[0],
+    action,
+    timestamp: new Date().toISOString(),
+    details,
+    targetId,
+    targetName
+  };
+  try {
+    await setDoc(doc(db, 'logs', id), logEntry);
+  } catch (err) {
+    console.error("Error writing action log:", err);
+  }
+}
+
+export async function fetchActionLogsFromFirebase(): Promise<ActionLog[]> {
+  const path = `logs`;
+  try {
+    const querySnapshot = await getDocs(collection(db, 'logs'));
+    const list: ActionLog[] = [];
+    querySnapshot.forEach((document) => {
+      list.push(document.data() as ActionLog);
+    });
+    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return [];
+  }
+}
+
 

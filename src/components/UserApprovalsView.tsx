@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, CheckCircle, XCircle, Clock, Mail, UserCheck } from 'lucide-react';
 import { AppUser, UserRole } from '../types';
-import { fetchAllAppUsers, updateAppUserApproval } from '../utils/firebase';
+import { fetchAllAppUsers, updateAppUserApproval, logActionToFirebase, auth } from '../utils/firebase';
 
 interface UserApprovalsViewProps {
   currentUserUid: string;
@@ -59,6 +59,18 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     setActionLoadingId(uid);
     try {
       await updateAppUserApproval(uid, !currentApproved, role, sector, sectors);
+      const targetUser = users.find(u => u.uid === uid);
+      const targetName = targetUser?.displayName || targetUser?.email || uid;
+      const admin = auth.currentUser;
+      logActionToFirebase(
+        admin?.uid || '',
+        admin?.email || '',
+        admin?.displayName || '',
+        'CONTROLE_DE_ACESSO',
+        `${!currentApproved ? 'Aprovou' : 'Revogou'} o acesso do usuário ${targetName}.`,
+        uid,
+        targetName
+      );
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar status do usuário:", err);
@@ -72,6 +84,18 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     setActionLoadingId(uid);
     try {
       await updateAppUserApproval(uid, approved, newRole, sector, sectors);
+      const targetUser = users.find(u => u.uid === uid);
+      const targetName = targetUser?.displayName || targetUser?.email || uid;
+      const admin = auth.currentUser;
+      logActionToFirebase(
+        admin?.uid || '',
+        admin?.email || '',
+        admin?.displayName || '',
+        'CONTROLE_DE_ACESSO',
+        `Alterou o cargo do usuário ${targetName} para "${newRole}".`,
+        uid,
+        targetName
+      );
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar cargo do usuário:", err);
@@ -86,6 +110,18 @@ export default function UserApprovalsView({ currentUserUid }: UserApprovalsViewP
     try {
       const primarySector = newSectors.length > 0 ? newSectors[0] : '';
       await updateAppUserApproval(uid, approved, role, primarySector, newSectors);
+      const targetUser = users.find(u => u.uid === uid);
+      const targetName = targetUser?.displayName || targetUser?.email || uid;
+      const admin = auth.currentUser;
+      logActionToFirebase(
+        admin?.uid || '',
+        admin?.email || '',
+        admin?.displayName || '',
+        'CONTROLE_DE_ACESSO',
+        `Alterou os setores sob responsabilidade de ${targetName} para: ${newSectors.join(', ') || 'Nenhum'}.`,
+        uid,
+        targetName
+      );
       await loadUsers();
     } catch (err) {
       console.error("Erro ao atualizar setores do usuário:", err);

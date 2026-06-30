@@ -12,9 +12,10 @@ interface StructureViewProps {
   onUpdateStructure: (newStructure: JohreiCenterStructure) => void;
   people: Person[];
   isDark: boolean;
+  currentUserRole?: string;
 }
 
-export default function StructureView({ structure, onUpdateStructure, people, isDark }: StructureViewProps) {
+export default function StructureView({ structure, onUpdateStructure, people, isDark, currentUserRole }: StructureViewProps) {
   // Tabs for subcategories of structure
   const [activeSubTab, setActiveSubTab] = useState<'am' | 'af' | 'assessores'>('am');
   const [localStructure, setLocalStructure] = useState<JohreiCenterStructure>(structure);
@@ -257,6 +258,10 @@ export default function StructureView({ structure, onUpdateStructure, people, is
   };
 
   const handleDeleteAM = (id: string) => {
+    if (currentUserRole === 'AM') {
+      alert('Assistentes de ministro não têm permissão para excluir membros da estrutura.');
+      return;
+    }
     setLocalStructure(prev => ({
       ...prev,
       amList: prev.amList.filter(am => am.id !== id)
@@ -285,6 +290,10 @@ export default function StructureView({ structure, onUpdateStructure, people, is
   };
 
   const handleDeleteAF = (id: string) => {
+    if (currentUserRole === 'AM') {
+      alert('Assistentes de ministro não têm permissão para excluir membros da estrutura.');
+      return;
+    }
     setLocalStructure(prev => ({
       ...prev,
       afList: prev.afList.filter(af => af.id !== id)
@@ -313,6 +322,10 @@ export default function StructureView({ structure, onUpdateStructure, people, is
   };
 
   const handleDeleteAssessor = (id: string) => {
+    if (currentUserRole === 'AM') {
+      alert('Assistentes de ministro não têm permissão para excluir membros da estrutura.');
+      return;
+    }
     setLocalStructure(prev => ({
       ...prev,
       assessoresList: prev.assessoresList.filter(as => as.id !== id)
@@ -792,14 +805,16 @@ export default function StructureView({ structure, onUpdateStructure, people, is
                             </span>
                           </div>
                         </div>
-                        <button
-                          id={`btn-delete-am-${am.id}`}
-                          onClick={() => handleDeleteAM(am.id)}
-                          title="Remover da estrutura"
-                          className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {currentUserRole !== 'AM' && (
+                          <button
+                            id={`btn-delete-am-${am.id}`}
+                            onClick={() => handleDeleteAM(am.id)}
+                            title="Remover da estrutura"
+                            className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Stats Grid */}
@@ -887,14 +902,16 @@ export default function StructureView({ structure, onUpdateStructure, people, is
                             </span>
                           </div>
                         </div>
-                        <button
-                          id={`btn-delete-af-${af.id}`}
-                          onClick={() => handleDeleteAF(af.id)}
-                          title="Remover da estrutura"
-                          className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {currentUserRole !== 'AM' && (
+                          <button
+                            id={`btn-delete-af-${af.id}`}
+                            onClick={() => handleDeleteAF(af.id)}
+                            title="Remover da estrutura"
+                            className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Stats Grid */}
@@ -978,13 +995,15 @@ export default function StructureView({ structure, onUpdateStructure, people, is
                         <p className="text-[10px] text-zinc-400 font-mono">Função: {ass.role}</p>
                       </div>
                     </div>
-                    <button
-                      id={`btn-delete-assessor-${ass.id}`}
-                      onClick={() => handleDeleteAssessor(ass.id)}
-                      className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {currentUserRole !== 'AM' && (
+                      <button
+                        id={`btn-delete-assessor-${ass.id}`}
+                        onClick={() => handleDeleteAssessor(ass.id)}
+                        className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

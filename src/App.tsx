@@ -17,6 +17,7 @@ import PendenciesView from './components/PendenciesView';
 import ReportsView from './components/ReportsView';
 import StructureView from './components/StructureView';
 import UserApprovalsView from './components/UserApprovalsView';
+import ActionLogsView from './components/ActionLogsView';
 import AIBulkEditor from './components/AIBulkEditor';
 import BirthdaysView from './components/BirthdaysView';
 import { parseCSV, generateSampleCSVString } from './utils/csvParser';
@@ -33,7 +34,8 @@ import {
   createAppUserOrGet,
   onAppUserChangeRealtime,
   fetchAllAppUsers,
-  updateAppUserApproval
+  updateAppUserApproval,
+  logActionToFirebase
 } from './utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import AuthView from './components/AuthView';
@@ -43,7 +45,7 @@ import {
   Compass, Users, Landmark, Award, BookOpen, Home, AlertTriangle, FileText, 
   Sun, Moon, Shield, Sparkles, LogOut, CheckCircle, Search, HelpCircle, Heart,
   Menu, X, ChevronLeft, ChevronRight, Upload, Database, Check,
-  LayoutDashboard, GraduationCap, Building2, BarChart3, Network, Gift
+  LayoutDashboard, GraduationCap, Building2, BarChart3, Network, Gift, Activity
 } from 'lucide-react';
 
 const DEFAULT_STRUCTURE: JohreiCenterStructure = {
@@ -514,8 +516,39 @@ export default function App() {
     // Procura por novos registros ou modificações
     enriched.forEach(p => {
       const existing = currentPeopleMap.get(p.id);
-      if (!existing || JSON.stringify(existing) !== JSON.stringify(p)) {
+      if (!existing) {
         changedPeople.push(p);
+        if (enriched.length > 0 && people.length > 0) { // Avoid logging initial loads
+          logActionToFirebase(
+            currentUser.uid,
+            currentUser.email || '',
+            currentAppUser?.displayName,
+            'ADICIONAR_PESSOA',
+            `Adicionou o membro ${p.nome} (${p.subtipoCadastro}) no setor ${p.setor2 || 'Sem Setor'}.`,
+            p.id,
+            p.nome
+          );
+        }
+      } else if (JSON.stringify(existing) !== JSON.stringify(p)) {
+        changedPeople.push(p);
+        const changes: string[] = [];
+        if (existing.nome !== p.nome) changes.push(`Nome alterado de "${existing.nome}" para "${p.nome}"`);
+        if (existing.statusAtual !== p.statusAtual) changes.push(`Status alterado de "${existing.statusAtual}" para "${p.statusAtual}"`);
+        if (existing.setor2 !== p.setor2) changes.push(`Setor alterado de "${existing.setor2}" para "${p.setor2}"`);
+        if (existing.subtipoCadastro !== p.subtipoCadastro) changes.push(`Tipo de cadastro alterado de "${existing.subtipoCadastro}" para "${p.subtipoCadastro}"`);
+        if (existing.am !== p.am) changes.push(`AM alterado de "${existing.am || 'Nenhum'}" para "${p.am || 'Nenhum'}"`);
+        if (existing.af2 !== p.af2) changes.push(`AF alterado de "${existing.af2 || 'Nenhum'}" para "${p.af2 || 'Nenhum'}"`);
+        
+        const details = changes.length > 0 ? changes.join(', ') : 'Informações da ficha atualizadas';
+        logActionToFirebase(
+          currentUser.uid,
+          currentUser.email || '',
+          currentAppUser?.displayName,
+          'EDITAR_PESSOA',
+          `Editou dados de ${p.nome}: ${details}.`,
+          p.id,
+          p.nome
+        );
       }
     });
 
@@ -524,6 +557,15 @@ export default function App() {
     people.forEach(p => {
       if (!enrichedIds.has(p.id)) {
         deletedIds.push(p.id);
+        logActionToFirebase(
+          currentUser.uid,
+          currentUser.email || '',
+          currentAppUser?.displayName,
+          'EXCLUIR_PESSOA',
+          `Excluiu o membro ${p.nome} (${p.subtipoCadastro}) do setor ${p.setor2 || 'Sem Setor'}.`,
+          p.id,
+          p.nome
+        );
       }
     });
 
@@ -538,6 +580,13 @@ export default function App() {
         // Se houver mais de 15 alterações, usa gravação em lote (ex: importação, carga demo ou edição em massa por IA)
         if (changedPeople.length > 15) {
           await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
+          await logActionToFirebase(
+            currentUser.uid,
+            currentUser.email || '',
+            currentAppUser?.displayName,
+            'EDITAR_PESSOA',
+            `Sincronização/Importação de dados em lote: processou ${changedPeople.length} registros.`
+          );
         } else {
           // Grava cada modificação individualmente de forma paralela para economizar cota de escrita
           await Promise.all([
@@ -559,6 +608,24 @@ export default function App() {
 
   const handleUpdateStructure = async (newStructure: JohreiCenterStructure) => {
     if (!currentUser) return;
+    // Track changes for logs
+    const addedAMs = newStructure.amList.filter(am => !structure.amList.some(x => x.id === am.id)).map(am => am.name);
+    const removedAMs = structure.amList.filter(am => !newStructure.amList.some(x => x.id === am.id)).map(am => am.name);
+    const addedAFs = newStructure.afList.filter(af => !structure.afList.some(x => x.id === af.id)).map(af => af.name);
+    const removedAFs = structure.afList.filter(af => !newStructure.afList.some(x => x.id === af.id)).map(af => af.name);
+    const addedAssessores = newStructure.assessoresList.filter(ass => !structure.assessoresList.some(x => x.id === ass.id)).map(ass => ass.name);
+    const removedAssessores = structure.assessoresList.filter(ass => !newStructure.assessoresList.some(x => x.id === ass.id)).map(ass => ass.name);
+
+    const changes: string[] = [];
+    if (addedAMs.length > 0) changes.push(`Adicionou AM(s): ${addedAMs.join(', ')}`);
+    if (removedAMs.length > 0) changes.push(`Removeu AM(s): ${removedAMs.join(', ')}`);
+    if (addedAFs.length > 0) changes.push(`Adicionou AF(s): ${addedAFs.join(', ')}`);
+    if (removedAFs.length > 0) changes.push(`Removeu AF(s): ${removedAFs.join(', ')}`);
+    if (addedAssessores.length > 0) changes.push(`Adicionou Assessor(es): ${addedAssessores.join(', ')}`);
+    if (removedAssessores.length > 0) changes.push(`Removeu Assessor(es): ${removedAssessores.join(', ')}`);
+
+    const details = changes.length > 0 ? changes.join('; ') : 'Alterou posições ou ordens na estrutura';
+
     // Atualiza structure e imediatamente re-normaliza o campo dos membros para refletir o organograma.
     const nextPeople = people.map(p => {
       const setor = (p.setor2 || '').toUpperCase();
@@ -586,6 +653,13 @@ export default function App() {
     try {
       await saveStructureToFirebase(currentUser.uid, newStructure);
       console.log("Estrutura salva com sucesso no Firebase.");
+      logActionToFirebase(
+        currentUser.uid,
+        currentUser.email || '',
+        currentAppUser?.displayName,
+        'EDITAR_ESTRUTURA',
+        `Atualizou a estrutura do Johrei Center: ${details}.`
+      );
     } catch (err) {
       console.error("Erro ao sincronizar estrutura no Firebase:", err);
       throw err; // Repassa para que a UI mostre erro se falhar
@@ -1101,7 +1175,8 @@ export default function App() {
               {[
                 ...menuItems,
                 ...(currentAppUser?.role === 'ADMIN' ? [
-                  { id: 'approvals', label: 'Controle de Acesso', icon: Shield }
+                  { id: 'approvals', label: 'Controle de Acesso', icon: Shield },
+                  { id: 'logs', label: 'Logs de Auditoria', icon: Activity }
                 ] : [])
               ].map(item => {
                 const Icon = item.icon;
@@ -1287,6 +1362,7 @@ export default function App() {
                 onUpdateStructure={handleUpdateStructure}
                 people={people}
                 isDark={isDark}
+                currentUserRole={userRole}
               />
             )}
 
@@ -1313,6 +1389,12 @@ export default function App() {
             {activeTab === 'approvals' && (
               <UserApprovalsView 
                 currentUserUid={currentUser.uid} 
+              />
+            )}
+
+            {activeTab === 'logs' && (
+              <ActionLogsView 
+                isDark={isDark} 
               />
             )}
           </div>

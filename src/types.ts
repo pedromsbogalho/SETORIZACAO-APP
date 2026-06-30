@@ -176,3 +176,16 @@ export interface JohreiCenterStructure {
   assessoresList: AssessorMember[];
 }
 
+export interface ActionLog {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName?: string;
+  action: string;
+  timestamp: string;
+  details: string;
+  targetId?: string;
+  targetName?: string;
+}
+
+
