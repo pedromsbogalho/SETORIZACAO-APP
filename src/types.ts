@@ -7,14 +7,14 @@ export type TipoCadastro = 'Ohikari' | 'Frequente' | 'Primeiro Contato' | 'Membr
 export type SubtipoCadastro = 'MEMBRO' | 'FREQUENTADOR';
 export type StatusAtual = 'ATIVO' | 'INATIVO' | 'AFASTADO' | 'FALECIDO';
 
-export type JornadaEtapa = 
-  | 'Primeiro atendimento' 
-  | 'Recebe Johrei' 
-  | 'Curso de Iniciação' 
-  | 'Ingressa' 
-  | 'Recebe Ohikari' 
-  | 'Curso Pós-Outorga' 
-  | 'Conclui Pós-Outorga' 
+export type JornadaEtapa =
+  | 'Primeiro atendimento'
+  | 'Recebe Johrei'
+  | 'Curso de Iniciação'
+  | 'Ingressa'
+  | 'Recebe Ohikari'
+  | 'Curso Pós-Outorga'
+  | 'Conclui Pós-Outorga'
   | 'Torna-se membro ativo';
 
 export interface CursoIniciacao {
@@ -54,11 +54,22 @@ export interface PurificacoesMembro {
   financeiro: boolean;
   outros: boolean;
   descricao?: string;
+  comentarios?: ComentarioJornada[];
 }
 
 export interface OrientaesMembro {
   texto: string;
   cumprindo: 'Sim' | 'Parcialmente' | 'Não' | 'Não se aplica';
+  comentarios?: ComentarioJornada[];
+}
+
+export interface ComentarioJornada {
+  id: string;
+  texto: string;
+  autorNome: string;
+  autorEmail?: string;
+  autorUid?: string;
+  createdAt: string; // ISO timestamp
 }
 
 export interface JornadaMembro {
@@ -94,18 +105,18 @@ export interface Person {
   tempoMembro: string;
   anoOutorga: string | number;
   idFamilia: string;
-  
+
   // Acompanhamento / Jornada Espiritual
   jornadaEtapa: JornadaEtapa;
   jornadaDatas: Record<string, string>; // Datas de conclusão de cada etapa
-  
+
   // Cursos
   cursoIniciacao: CursoIniciacao;
   cursoPosOutorga: CursoPosOutorga;
-  
+
   // Grupos WhatsApp
   gruposWhats: GrupoWhatsApp;
-  
+
   // Jornada específica de Membro (dedicações contínuas, cursos de nível, ikebana, purificações, etc)
   jornadaMembro?: JornadaMembro;
 }

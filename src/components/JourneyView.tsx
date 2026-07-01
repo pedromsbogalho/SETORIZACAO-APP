@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Person, JornadaEtapa, JornadaMembro, CursosNivelIgreja } from '../types';
-import { CheckCircle, Calendar, Sparkles, User, ChevronRight, HelpCircle, AlertCircle, Clock, Heart, Award, BookOpen, Sprout, DollarSign, Activity, FileText, Check, Plus, Minus, Users } from 'lucide-react';
+import { Person, JornadaEtapa, JornadaMembro, CursosNivelIgreja, ComentarioJornada } from '../types';
+import { CheckCircle, Calendar, Sparkles, User, ChevronRight, HelpCircle, AlertCircle, Clock, Heart, Award, BookOpen, Sprout, DollarSign, Activity, FileText, Check, Plus, Minus, Users, MessageSquare, Send, Trash2 } from 'lucide-react';
 
 interface JourneyViewProps {
   people: Person[];
@@ -13,6 +13,9 @@ interface JourneyViewProps {
   isDark: boolean;
   currentUserRole?: string;
   currentUserSectors?: string[];
+  currentUserName?: string;
+  currentUserEmail?: string;
+  currentUserUid?: string;
 }
 
 const JOURNEY_STEPS: JornadaEtapa[] = [
@@ -65,11 +68,11 @@ export function getJornadaMembro(person?: Person): JornadaMembro {
   };
 }
 
-export default function JourneyView({ people, onUpdatePeople, isDark, currentUserRole, currentUserSectors }: JourneyViewProps) {
+export default function JourneyView({ people, onUpdatePeople, isDark, currentUserRole, currentUserSectors, currentUserName, currentUserEmail, currentUserUid }: JourneyViewProps) {
   const [selectedPersonId, setSelectedPersonId] = useState<string>(people[0]?.id || '');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [activeTab, setActiveTab] = useState<'FREQUENTADOR' | 'MEMBRO'>('FREQUENTADOR');
-  
+
   // Advanced filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [sectorFilter, setSectorFilter] = useState('ALL');
@@ -110,7 +113,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
   const filteredPeople = people.filter(p => {
     const matchesSearch = p.nome.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSector = sectorFilter === 'ALL' || (p.setor2 || 'SEM SETOR') === sectorFilter;
-    
+
     let matchesStage = stageFilter === 'ALL' || p.jornadaEtapa === stageFilter;
     if (pendingFilter) {
       const datas = p.jornadaDatas || {};
@@ -123,7 +126,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
         matchesStage = false;
       }
     }
-    
+
     return matchesSearch && matchesSector && matchesStage;
   });
 
@@ -151,13 +154,58 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
     if (!selectedPerson) return;
     const currentJornada = getJornadaMembro(selectedPerson);
     const updatedJornada = { ...currentJornada, ...updatedField };
-    
+
     const updatedPerson: Person = {
       ...selectedPerson,
       jornadaMembro: updatedJornada
     };
-    
+
     onUpdatePeople(people.map(p => p.id === selectedPerson.id ? updatedPerson : p));
+  };
+
+  const handleAddComentario = (section: 'purificacoes' | 'orientacoes', texto: string) => {
+    if (!selectedPerson) return;
+    const trimmed = texto.trim();
+    if (!trimmed) return;
+    const currentJornada = getJornadaMembro(selectedPerson);
+    const novoComentario: ComentarioJornada = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      texto: trimmed,
+      autorNome: currentUserName || currentUserEmail || 'Usuário',
+      autorEmail: currentUserEmail,
+      autorUid: currentUserUid,
+      createdAt: new Date().toISOString(),
+    };
+    const sectionData = currentJornada[section] as any;
+    const listaAtual: ComentarioJornada[] = Array.isArray(sectionData.comentarios) ? sectionData.comentarios : [];
+    handleUpdateJornadaMembro({
+      [section]: { ...sectionData, comentarios: [...listaAtual, novoComentario] },
+    } as any);
+  };
+
+  const handleDeleteComentario = (section: 'purificacoes' | 'orientacoes', comentarioId: string) => {
+    if (!selectedPerson) return;
+    const currentJornada = getJornadaMembro(selectedPerson);
+    const sectionData = currentJornada[section] as any;
+    const listaAtual: ComentarioJornada[] = Array.isArray(sectionData.comentarios) ? sectionData.comentarios : [];
+    handleUpdateJornadaMembro({
+      [section]: { ...sectionData, comentarios: listaAtual.filter((c) => c.id !== comentarioId) },
+    } as any);
+  };
+
+  const canDeleteComentario = (c: ComentarioJornada) => {
+    if (currentUserRole === 'ADMIN') return true;
+    if (currentUserUid && c.autorUid && c.autorUid === currentUserUid) return true;
+    return false;
+  };
+
+  const formatComentarioTimestamp = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return iso;
+    }
   };
 
   const handleToggleStep = (step: JornadaEtapa, completed: boolean) => {
@@ -215,11 +263,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   setPendingFilter(isSelected ? null : step);
                   setStageFilter('ALL'); // Clear exact stage filter if pending filter is used
                 }}
-                className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden backdrop-blur-md cursor-pointer ${
-                  isSelected
+                className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden backdrop-blur-md cursor-pointer ${isSelected
                     ? 'bg-amber-600/10 border-amber-500/50 text-amber-700 dark:text-amber-400 shadow-xs'
                     : 'bg-white/40 dark:bg-zinc-900/40 border-slate-200/60 dark:border-white/5 text-zinc-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/40'
-                }`}
+                  }`}
               >
                 <span className="block text-[9px] font-mono uppercase tracking-wider opacity-60 truncate" title={step}>{step}</span>
                 <span className="block text-xl font-bold font-display mt-1">{count}</span>
@@ -238,9 +285,9 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
         <div className="p-4 rounded-xl glass-panel shadow-sm space-y-4">
           <div className="space-y-3">
             <span className="block text-[10px] font-mono uppercase text-zinc-400 tracking-wider">Filtrar Base</span>
-            
+
             {/* Search Input */}
-            <input 
+            <input
               id="journey-search-input"
               type="text"
               placeholder="Buscar por nome..."
@@ -289,24 +336,22 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                 const active = p.id === selectedPerson?.id;
                 const isMembro = p.subtipoCadastro === 'MEMBRO';
                 return (
-                  <div 
+                  <div
                     key={p.id}
                     onClick={() => setSelectedPersonId(p.id)}
-                    className={`p-3 rounded-lg border transition-all cursor-pointer flex justify-between items-center ${
-                      active 
-                        ? 'border-teal-500/50 bg-teal-500/10 text-teal-600 dark:text-teal-300 font-bold' 
+                    className={`p-3 rounded-lg border transition-all cursor-pointer flex justify-between items-center ${active
+                        ? 'border-teal-500/50 bg-teal-500/10 text-teal-600 dark:text-teal-300 font-bold'
                         : `${isDark ? 'border-zinc-800 bg-zinc-950/10 hover:bg-zinc-800/40 text-zinc-300' : 'border-slate-200/40 bg-white/40 hover:bg-slate-100/50 text-slate-700'}`
-                    }`}
+                      }`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-xs truncate uppercase">{p.nome}</p>
                       <span className="text-[10px] text-zinc-400 block truncate mt-0.5">Etapa: {p.jornadaEtapa}</span>
                     </div>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase ml-2 flex-shrink-0 font-bold ${
-                      isMembro 
-                        ? 'bg-teal-50/80 text-teal-700 dark:bg-teal-950/20 dark:text-teal-400' 
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase ml-2 flex-shrink-0 font-bold ${isMembro
+                        ? 'bg-teal-50/80 text-teal-700 dark:bg-teal-950/20 dark:text-teal-400'
                         : 'bg-orange-50/80 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400'
-                    }`}>
+                      }`}>
                       {p.subtipoCadastro === 'MEMBRO' ? 'MEMBRO' : 'FREQ.'}
                     </span>
                   </div>
@@ -342,9 +387,9 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
               <div className="flex items-center gap-1.5 bg-white/40 dark:bg-zinc-950/40 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/10 backdrop-blur-xs">
                 <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Data conquista:</span>
-                <input 
+                <input
                   id="journey-date-picker"
-                  type="date" 
+                  type="date"
                   value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
                   className="text-xxs font-mono bg-transparent text-slate-700 dark:text-zinc-200 outline-none"
@@ -356,11 +401,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
             <div className="flex bg-slate-100/80 dark:bg-zinc-950/60 p-1 rounded-xl border border-slate-200/40 dark:border-white/5 w-full sm:w-fit self-center">
               <button
                 onClick={() => setActiveTab('FREQUENTADOR')}
-                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase flex items-center justify-center gap-2 cursor-pointer ${
-                  activeTab === 'FREQUENTADOR'
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'FREQUENTADOR'
                     ? 'bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 shadow-xs border border-slate-200/40 dark:border-white/5'
                     : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                }`}
+                  }`}
               >
                 <Clock className="w-3.5 h-3.5" />
                 Frequentador
@@ -368,11 +412,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
               {hasOhikari && (
                 <button
                   onClick={() => setActiveTab('MEMBRO')}
-                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase flex items-center justify-center gap-2 cursor-pointer ${
-                    activeTab === 'MEMBRO'
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'MEMBRO'
                       ? 'bg-teal-600 text-white shadow-xs'
                       : 'text-teal-600/80 dark:text-teal-400/80 hover:text-teal-600 dark:hover:text-teal-300'
-                  }`}
+                    }`}
                 >
                   <Award className="w-3.5 h-3.5" />
                   Membro (Acomp. Contínuo)
@@ -390,21 +433,20 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   {JOURNEY_STEPS.map((step, idx) => {
                     const dateCompleted = selectedPerson.jornadaDatas[step];
                     const active = selectedPerson.jornadaEtapa === step;
-                    
+
                     return (
                       <div key={step} className="relative flex items-start gap-4">
                         {/* Circle Bullet indicator */}
                         <div className="absolute -left-[23px] top-1">
-                          <button 
+                          <button
                             id={`btn-toggle-step-${idx}`}
                             onClick={() => handleToggleStep(step, !dateCompleted)}
-                            className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all cursor-pointer ${
-                              dateCompleted 
-                                ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' 
-                                : active 
-                                  ? 'bg-white border-teal-500 dark:bg-zinc-900 text-teal-500 shadow-sm' 
+                            className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all cursor-pointer ${dateCompleted
+                                ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm'
+                                : active
+                                  ? 'bg-white border-teal-500 dark:bg-zinc-900 text-teal-500 shadow-sm'
                                   : `${isDark ? 'bg-zinc-950 border-zinc-800 hover:border-zinc-600 text-transparent' : 'bg-white border-slate-200 hover:border-slate-400 text-transparent'}`
-                            }`}
+                              }`}
                           >
                             {dateCompleted && <CheckCircle className="w-4.5 h-4.5" />}
                             {!dateCompleted && active && <Clock className="w-3.5 h-3.5" />}
@@ -419,7 +461,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                                 <span className="px-1.5 py-0.2 bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400 rounded text-[9px] font-mono font-bold">Etapa Atual</span>
                               )}
                             </h4>
-                            
+
                             {/* Timestamp */}
                             {dateCompleted ? (
                               <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded flex items-center gap-1 font-bold">
@@ -480,7 +522,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
 
                 {/* Main Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  
+
                   {/* Column 1: Dedicações Contínuas */}
                   <div className="p-4 rounded-xl border border-slate-200/60 dark:border-white/5 bg-slate-50/30 dark:bg-zinc-950/20 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200/40 dark:border-white/5 pb-2">
@@ -501,11 +543,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                             <button
                               key={option}
                               onClick={() => handleUpdateJornadaMembro({ donativo: option })}
-                              className={`p-2 rounded-lg text-xxs font-semibold uppercase border transition-all text-center cursor-pointer ${
-                                isSelected
+                              className={`p-2 rounded-lg text-xxs font-semibold uppercase border transition-all text-center cursor-pointer ${isSelected
                                   ? 'bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-bold'
                                   : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                              }`}
+                                }`}
                             >
                               {option}
                             </button>
@@ -527,11 +568,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                             <button
                               key={option}
                               onClick={() => handleUpdateJornadaMembro({ johreiFrequencia: option })}
-                              className={`p-2 rounded-lg text-xxs font-semibold uppercase border transition-all text-center cursor-pointer ${
-                                isSelected
+                              className={`p-2 rounded-lg text-xxs font-semibold uppercase border transition-all text-center cursor-pointer ${isSelected
                                   ? 'bg-rose-500/15 border-rose-500 text-rose-700 dark:text-rose-400 font-bold'
                                   : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                              }`}
+                                }`}
                             >
                               {option}
                             </button>
@@ -610,7 +650,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                         {[1, 2, 3, 4].map(num => {
                           const key = `nivel${num}` as keyof CursosNivelIgreja;
                           const currentVal = getJornadaMembro(selectedPerson).cursosNivel[key];
-                          
+
                           let valColor = "text-zinc-400";
                           if (currentVal === "Concluído") valColor = "text-teal-600 dark:text-teal-400 font-bold";
                           if (currentVal === "Em andamento") valColor = "text-amber-500 font-semibold";
@@ -649,11 +689,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                             <button
                               key={option}
                               onClick={() => handleUpdateJornadaMembro({ jovem3Participacao: option })}
-                              className={`py-1.5 rounded-lg text-[9px] font-bold uppercase border transition-all text-center cursor-pointer ${
-                                isSelected
+                              className={`py-1.5 rounded-lg text-[9px] font-bold uppercase border transition-all text-center cursor-pointer ${isSelected
                                   ? 'bg-indigo-500/15 border-indigo-500 text-indigo-700 dark:text-indigo-400'
                                   : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-600'
-                              }`}
+                                }`}
                             >
                               {option}
                             </button>
@@ -666,7 +705,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   {/* Column 3: Purificações e Aprimoramento */}
                   <div className="p-4 rounded-xl border border-slate-200/60 dark:border-white/5 bg-slate-50/30 dark:bg-zinc-950/20 space-y-4 md:col-span-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      
+
                       {/* Purifications checkboxes */}
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 border-b border-slate-200/40 dark:border-white/5 pb-2">
@@ -690,11 +729,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                                   const updated = { ...pState, [key]: !isChecked };
                                   handleUpdateJornadaMembro({ purificacoes: updated });
                                 }}
-                                className={`p-2 rounded-xl border text-left flex items-center justify-between text-xxs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
-                                  isChecked
+                                className={`p-2 rounded-xl border text-left flex items-center justify-between text-xxs font-semibold uppercase tracking-wider transition-all cursor-pointer ${isChecked
                                     ? 'bg-amber-500/15 border-amber-500 text-amber-700 dark:text-amber-400 font-bold'
                                     : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-500'
-                                }`}
+                                  }`}
                               >
                                 <span>{label}</span>
                                 {isChecked && <Check className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
@@ -750,11 +788,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                                       const oState = getJornadaMembro(selectedPerson).orientacoes;
                                       handleUpdateJornadaMembro({ orientacoes: { ...oState, cumprindo: option } });
                                     }}
-                                    className={`py-1 rounded-lg text-[9px] font-bold uppercase border transition-all text-center cursor-pointer ${
-                                      isSelected
+                                    className={`py-1 rounded-lg text-[9px] font-bold uppercase border transition-all text-center cursor-pointer ${isSelected
                                         ? 'bg-teal-500 border-teal-500 text-white font-bold'
                                         : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-650'
-                                    }`}
+                                      }`}
                                   >
                                     {option}
                                   </button>

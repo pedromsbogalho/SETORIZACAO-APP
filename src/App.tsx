@@ -41,8 +41,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import AuthView from './components/AuthView';
 
 // Icons
-import { 
-  Compass, Users, Landmark, Award, BookOpen, Home, AlertTriangle, FileText, 
+import {
+  Compass, Users, Landmark, Award, BookOpen, Home, AlertTriangle, FileText,
   Sun, Moon, Shield, Sparkles, LogOut, CheckCircle, Search, HelpCircle, Heart,
   Menu, X, ChevronLeft, ChevronRight, Upload, Database, Check,
   LayoutDashboard, GraduationCap, Building2, BarChart3, Network, Gift, Activity
@@ -71,7 +71,7 @@ const DEFAULT_STRUCTURE: JohreiCenterStructure = {
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  
+
   // Theme fixa: removido toggle (mantemos tema light por simplicidade)
   const isDark = false;
 
@@ -128,19 +128,19 @@ export default function App() {
     };
 
     const groups: Record<string, Person[]> = {};
-    
+
     // Group people strictly by normalized address
     uniqueList.forEach(p => {
       const rawAddr = (p.endCompleto || '').trim();
       const addrUpper = rawAddr.toUpperCase();
-      
+
       if (
-        rawAddr && 
-        addrUpper !== 'N/A' && 
-        addrUpper !== 'SEM ENDERECO' && 
-        addrUpper !== 'SEM ENDEREÇO' && 
-        addrUpper !== 'ENDEREÇO NÃO INFORMADO' && 
-        addrUpper !== 'ENDERECO NAO INFORMADO' && 
+        rawAddr &&
+        addrUpper !== 'N/A' &&
+        addrUpper !== 'SEM ENDERECO' &&
+        addrUpper !== 'SEM ENDEREÇO' &&
+        addrUpper !== 'ENDEREÇO NÃO INFORMADO' &&
+        addrUpper !== 'ENDERECO NAO INFORMADO' &&
         rawAddr.length >= 5
       ) {
         const norm = normalizeAddress(rawAddr);
@@ -152,7 +152,7 @@ export default function App() {
         }
       }
     });
-    
+
     const getOldest = (list: Person[]): Person => {
       return list.reduce((oldest, current) => {
         const ageOldest = oldest.idade || 0;
@@ -164,18 +164,18 @@ export default function App() {
         return oldest;
       }, list[0]);
     };
-    
+
     return uniqueList.map(p => {
       const rawAddr = (p.endCompleto || '').trim();
       const addrUpper = rawAddr.toUpperCase();
-      
+
       if (
-        rawAddr && 
-        addrUpper !== 'N/A' && 
-        addrUpper !== 'SEM ENDERECO' && 
-        addrUpper !== 'SEM ENDEREÇO' && 
-        addrUpper !== 'ENDEREÇO NÃO INFORMADO' && 
-        addrUpper !== 'ENDERECO NAO INFORMADO' && 
+        rawAddr &&
+        addrUpper !== 'N/A' &&
+        addrUpper !== 'SEM ENDERECO' &&
+        addrUpper !== 'SEM ENDEREÇO' &&
+        addrUpper !== 'ENDEREÇO NÃO INFORMADO' &&
+        addrUpper !== 'ENDERECO NAO INFORMADO' &&
         rawAddr.length >= 5
       ) {
         const norm = normalizeAddress(rawAddr);
@@ -188,7 +188,7 @@ export default function App() {
           };
         }
       }
-      
+
       // For people without a valid address, they belong to their own single-person family
       return {
         ...p,
@@ -200,7 +200,7 @@ export default function App() {
   // Helper to de-duplicate, sanitize, and clean loaded people
   const cleanAndDeDuplicatePeople = (pList: Person[]): Person[] => {
     const seenIds = new Set<string>();
-    
+
     // Parse malformed names containing commas (e.g. from comma/semicolon CSV export split glitches)
     const sanitizedList = pList.map(p => {
       let name = (p.nome || '').trim();
@@ -214,7 +214,7 @@ export default function App() {
             const sector = parts[offset + 1] || '';
             const realName = parts[offset + 2] || '';
             const address = parts.slice(offset + 3).join(', ') || '';
-            
+
             const updated = { ...p };
             if (realName) updated.nome = realName.toUpperCase();
             if (af) updated.af2 = af.toUpperCase();
@@ -233,19 +233,19 @@ export default function App() {
       if (!p.id) return false;
       const key = p.id.trim();
       if (seenIds.has(key)) return false;
-      
+
       const name = (p.nome || '').trim().toUpperCase();
-      if (!name || 
-          name.includes('FALTA LOGRADOURO') || 
-          name.includes('LOGRADOURO') || 
-          name.startsWith(',') || 
-          name.startsWith('0,') || 
-          name.startsWith('1,') || 
+      if (!name ||
+          name.includes('FALTA LOGRADOURO') ||
+          name.includes('LOGRADOURO') ||
+          name.startsWith(',') ||
+          name.startsWith('0,') ||
+          name.startsWith('1,') ||
           name === 'N/A'
       ) {
         return false;
       }
-      
+
       seenIds.add(key);
       return true;
     });
@@ -445,9 +445,9 @@ export default function App() {
       setFamilies([]);
       return;
     }
-    
+
     const groups: Record<string, Person[]> = {};
-    
+
     people.forEach(p => {
       const famId = (p.idFamilia && p.idFamilia.startsWith('FAM-')) ? p.idFamilia : `FAM-${p.id}`;
       if (!groups[famId]) {
@@ -455,9 +455,9 @@ export default function App() {
       }
       groups[famId].push(p);
     });
-    
+
     const derived: Family[] = [];
-    
+
     const getOldest = (list: Person[]): Person => {
       return list.reduce((oldest, current) => {
         const ageOldest = oldest.idade || 0;
@@ -469,10 +469,10 @@ export default function App() {
         return oldest;
       }, list[0]);
     };
-    
+
     Object.entries(groups).forEach(([famId, list]) => {
       const oldest = getOldest(list);
-      
+
       // Prefer a valid street address, starting with the oldest person's address
       let finalAddress = '';
       const oldestAddress = (oldest.endCompleto || '').trim();
@@ -487,7 +487,7 @@ export default function App() {
       }
 
       const hasNoAddress = !finalAddress || finalAddress === 'Endereço não informado' || finalAddress === 'N/A' || finalAddress === 'SEM ENDEREÇO' || finalAddress.length < 5;
-      
+
       derived.push({
         id: famId,
         nome: `FAMÍLIA DE ${oldest.nome}${hasNoAddress ? ' (S/ End.)' : ''}`,
@@ -497,7 +497,7 @@ export default function App() {
         observacoes: hasNoAddress ? 'Cadastro individual.' : `Grupo residencial com ${list.length} integrantes.`
       });
     });
-    
+
     setFamilies(derived);
   }, [people]);
 
@@ -539,7 +539,7 @@ export default function App() {
         if (existingPerson.subtipoCadastro !== p.subtipoCadastro) changes.push(`Tipo de cadastro alterado de "${existingPerson.subtipoCadastro}" para "${p.subtipoCadastro}"`);
         if (existingPerson.am !== p.am) changes.push(`AM alterado de "${existingPerson.am || 'Nenhum'}" para "${p.am || 'Nenhum'}"`);
         if (existingPerson.af2 !== p.af2) changes.push(`AF alterado de "${existingPerson.af2 || 'Nenhum'}" para "${p.af2 || 'Nenhum'}"`);
-        
+
         const details = changes.length > 0 ? changes.join(', ') : 'Informações da ficha atualizadas';
         logActionToFirebase(
           currentUser.uid,
@@ -577,7 +577,7 @@ export default function App() {
     try {
       if (changedPeople.length > 0 || deletedIds.length > 0) {
         console.log(`[Granular Sync] Sincronizando ${changedPeople.length} alterações/adições e ${deletedIds.length} exclusões no Firestore.`);
-        
+
         // Se houver mais de 15 alterações, usa gravação em lote (ex: importação, carga demo ou edição em massa por IA)
         if (changedPeople.length > 15) {
           await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
@@ -847,7 +847,7 @@ export default function App() {
 
   const missingPostOutorgaCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.tipoCadastro === 'Ohikari' && !Object.values(p.cursoPosOutorga.aulas).every(v => v === 'Concluido')).length;
   const noWhatsCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.jornadaEtapa !== 'Primeiro atendimento' && !p.gruposWhats.grupoSetor && !p.gruposWhats.grupoGeral).length;
-  
+
   // Families sem Assistente de Família (AF) definido
   const familiesSemAFCount = families.filter(f => !f.afResponsavel).length;
 
@@ -950,7 +950,7 @@ export default function App() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-orange-400/10 dark:bg-orange-500/5 blur-[120px] pointer-events-none"></div>
 
         <div className="w-full flex flex-col md:flex-row min-h-screen z-10">
-          
+
           {/* LEFT SIDE: Brand & Welcome Presentation */}
           <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200/40 dark:border-white/5 bg-slate-500/[0.02] dark:bg-white/[0.01]">
             <div className="space-y-6">
@@ -1015,7 +1015,7 @@ export default function App() {
           {/* RIGHT SIDE: Drag and Drop & Paste Input */}
           <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-center bg-transparent">
             <div className="max-w-md w-full mx-auto space-y-6">
-              
+
               <div>
                 <h2 className="text-2xl font-sans font-bold tracking-tight">Insira os dados para iniciar</h2>
                 <p className={`text-xs mt-1.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
@@ -1024,25 +1024,25 @@ export default function App() {
               </div>
 
               {/* Drag and Drop Zone Container */}
-              <div 
+              <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => onboardingFileRef.current?.click()}
                 className={`p-8 rounded-2xl border-2 border-dashed text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-3 ${
-                  isDragging 
-                    ? 'border-teal-500 bg-teal-500/10 scale-[1.02] shadow-md shadow-teal-500/5' 
+                  isDragging
+                    ? 'border-teal-500 bg-teal-500/10 scale-[1.02] shadow-md shadow-teal-500/5'
                     : `${isDark ? 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/20' : 'border-slate-200 hover:border-slate-300 bg-white/40'} hover:shadow-xs`
                 }`}
               >
-                <input 
-                  type="file" 
-                  accept=".csv" 
+                <input
+                  type="file"
+                  accept=".csv"
                   ref={onboardingFileRef}
                   onChange={handleOnboardingFileUpload}
                   className="hidden"
                 />
-                
+
                 <div className={`p-4 rounded-full ${isDragging ? 'bg-teal-500 text-white' : 'bg-teal-500/10 text-teal-600 dark:text-teal-400'} transition-all`}>
                   <Upload className="w-6 h-6" />
                 </div>
@@ -1065,7 +1065,7 @@ export default function App() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-[10px] font-mono text-zinc-400 uppercase font-bold">
                   <span>Ou cole o texto formatado em CSV</span>
-                  <button 
+                  <button
                     onClick={() => {
                       setOnboardingCSV(generateSampleCSVString());
                       setOnboardingError('');
@@ -1128,13 +1128,13 @@ export default function App() {
       {/* Frosted Glass background elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-400/10 dark:bg-teal-500/5 blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-orange-400/10 dark:bg-orange-500/5 blur-[120px] pointer-events-none"></div>
-      
+
       <div className="flex h-screen overflow-hidden relative z-10">
-        
+
         {/* SIDEBAR NAVIGATION */}
-        <aside 
+        <aside
           className={`flex-shrink-0 flex flex-col justify-between glass-sidebar transition-all duration-300 relative z-30
-            ${isSidebarCollapsed ? 'w-16' : 'w-64'} 
+            ${isSidebarCollapsed ? 'w-16' : 'w-64'}
             ${isMobileSidebarOpen ? 'translate-x-0 fixed inset-y-0 left-0 w-64' : 'max-md:-translate-x-full max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:w-64'}
           `}
         >
@@ -1154,7 +1154,7 @@ export default function App() {
               </div>
 
               {/* Desktop Collapse Button */}
-              <button 
+              <button
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                 className="hidden md:block p-1.5 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
                 title={isSidebarCollapsed ? "Expandir menu" : "Recolher menu"}
@@ -1163,7 +1163,7 @@ export default function App() {
               </button>
 
               {/* Mobile Close Button */}
-              <button 
+              <button
                 onClick={() => setIsMobileSidebarOpen(false)}
                 className="md:hidden p-1.5 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
               >
@@ -1191,8 +1191,8 @@ export default function App() {
                       setIsMobileSidebarOpen(false); // Auto-close on mobile selection
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition-all text-left cursor-pointer ${
-                      isActive 
-                        ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-l-2 border-teal-500' 
+                      isActive
+                        ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-l-2 border-teal-500'
                         : `${isDark ? 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`
                     }`}
                     title={isSidebarCollapsed ? item.label : undefined}
@@ -1243,7 +1243,7 @@ export default function App() {
 
             {/* Completely Clear database button for full admin reset */}
             {!isSidebarCollapsed && userRole === 'ADMIN' && (
-              <button 
+              <button
                 onClick={handleResetDatabaseFully}
                 className="w-full text-center text-[10px] font-bold text-red-500 hover:underline py-1.5 rounded hover:bg-red-500/5 cursor-pointer block"
               >
@@ -1255,7 +1255,7 @@ export default function App() {
 
         {/* Mobile Sidebar backdrop overlay */}
         {isMobileSidebarOpen && (
-          <div 
+          <div
             onClick={() => setIsMobileSidebarOpen(false)}
             className="fixed inset-0 bg-black/50 z-20 md:hidden backdrop-blur-xs transition-opacity duration-300"
           ></div>
@@ -1263,10 +1263,10 @@ export default function App() {
 
         {/* MAIN BODY AREA */}
         <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
-          
+
           {/* Top minimal bar with hamburger trigger on mobile */}
           <header className="px-6 py-4 flex items-center glass-header md:hidden">
-            <button 
+            <button
               onClick={() => setIsMobileSidebarOpen(true)}
               className="p-1.5 -ml-1 rounded-lg border border-slate-200/40 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-zinc-400 cursor-pointer"
             >
@@ -1277,9 +1277,9 @@ export default function App() {
           {/* Tab View switching workspace */}
           <div className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
             {activeTab === 'dashboard' && (
-              <DashboardView 
-                people={people} 
-                families={families} 
+              <DashboardView
+                people={people}
+                families={families}
                 onNavigate={setActiveTab}
                 isDark={isDark}
                 currentUserRole={userRole}
@@ -1288,9 +1288,9 @@ export default function App() {
             )}
 
             {activeTab === 'people' && (
-              <PeopleView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
+              <PeopleView
+                people={people}
+                onUpdatePeople={handleUpdatePeople}
                 isDark={isDark}
                 currentUserRole={userRole}
                 currentAMName={userRole === 'AM' ? currentAMName : undefined}
@@ -1300,9 +1300,9 @@ export default function App() {
             )}
 
             {activeTab === 'frequenters' && (
-              <FrequentersView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
+              <FrequentersView
+                people={people}
+                onUpdatePeople={handleUpdatePeople}
                 isDark={isDark}
                 currentUserRole={userRole}
                 currentAMName={userRole === 'AM' ? currentAMName : undefined}
@@ -1311,54 +1311,57 @@ export default function App() {
             )}
 
             {activeTab === 'birthdays' && (
-              <BirthdaysView 
-                people={people} 
+              <BirthdaysView
+                people={people}
                 isDark={isDark}
               />
             )}
 
             {activeTab === 'tree' && (
-              <TreeView 
-                people={people} 
-                families={families} 
+              <TreeView
+                people={people}
+                families={families}
                 structure={structure}
-                isDark={isDark} 
+                isDark={isDark}
                 currentUserRole={userRole}
                 currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
             {activeTab === 'journey' && (
-              <JourneyView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
-                isDark={isDark} 
+              <JourneyView
+                people={people}
+                onUpdatePeople={handleUpdatePeople}
+                isDark={isDark}
                 currentUserRole={userRole}
                 currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
+                currentUserName={currentAppUser?.displayName || currentUser?.displayName || currentUser?.email || ''}
+                currentUserEmail={currentAppUser?.email || currentUser?.email || ''}
+                currentUserUid={currentUser?.uid || currentAppUser?.uid || ''}
               />
             )}
 
             {activeTab === 'courses' && (
-              <CoursesView 
-                people={people} 
-                onUpdatePeople={handleUpdatePeople} 
-                isDark={isDark} 
+              <CoursesView
+                people={people}
+                onUpdatePeople={handleUpdatePeople}
+                isDark={isDark}
               />
             )}
 
             {activeTab === 'families' && (
-              <FamiliesView 
-                families={families} 
+              <FamiliesView
+                families={families}
                 onUpdateFamilies={handleUpdateFamilies}
-                people={people} 
-                isDark={isDark} 
+                people={people}
+                isDark={isDark}
                 currentUserRole={userRole}
                 currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
             {activeTab === 'structure' && (
-              <StructureView 
+              <StructureView
                 structure={structure}
                 onUpdateStructure={handleUpdateStructure}
                 people={people}
@@ -1368,34 +1371,34 @@ export default function App() {
             )}
 
             {activeTab === 'pendencies' && (
-              <PendenciesView 
-                people={people} 
+              <PendenciesView
+                people={people}
                 onUpdatePeople={handleUpdatePeople}
-                families={families} 
+                families={families}
                 onUpdateFamilies={handleUpdateFamilies}
-                isDark={isDark} 
+                isDark={isDark}
                 currentUserRole={userRole}
                 currentUserSectors={currentAppUser?.sectors || (currentAppUser?.sector ? [currentAppUser.sector] : [])}
               />
             )}
 
             {activeTab === 'reports' && (
-              <ReportsView 
-                people={people} 
-                families={families} 
-                isDark={isDark} 
+              <ReportsView
+                people={people}
+                families={families}
+                isDark={isDark}
               />
             )}
 
             {activeTab === 'approvals' && (
-              <UserApprovalsView 
-                currentUserUid={currentUser.uid} 
+              <UserApprovalsView
+                currentUserUid={currentUser.uid}
               />
             )}
 
             {activeTab === 'logs' && (
-              <ActionLogsView 
-                isDark={isDark} 
+              <ActionLogsView
+                isDark={isDark}
               />
             )}
           </div>
@@ -1414,7 +1417,7 @@ export default function App() {
               </div>
               <h3 className="text-base font-bold">Exclusão Permanente de Dados</h3>
             </div>
-            
+
             <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-slate-500'} leading-relaxed mb-6`}>
               Atenção: Isso excluirá <strong>permanentemente</strong> todos os dados salvos neste Johrei Center, incluindo membros, frequentadores, históricos de acompanhamento e vínculos territoriais. Esta operação é irreversível e o sistema retornará ao estado de alimentação inicial. Deseja prosseguir?
             </p>
@@ -1440,9 +1443,9 @@ export default function App() {
       )}
 
       {/* AI Bulk Editor Floating Panel */}
-      <AIBulkEditor 
-        people={people} 
-        onUpdatePeople={handleUpdatePeople} 
+      <AIBulkEditor
+        people={people}
+        onUpdatePeople={handleUpdatePeople}
         activeTab={activeTab}
         isDark={isDark}
       />
