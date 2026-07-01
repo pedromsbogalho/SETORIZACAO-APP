@@ -1,0 +1,36 @@
+- Colocar o resumo da jornada espiritual na tela de pós outorga.
+- Ter alguma tela de assistentes de familia
+
+CINTIA
+- Ter o setor no card da pessoa na lista de aniversariantes
+
+INFO SOBRE COMO FUNCIONA A GRAVAÇÃO NO FIRESTONE:
+
+Essa é uma excelente pergunta! Para o seu aplicativo de controle de membros (que lida com importação de planilhas, controle de presença, histórico de cursos e logs de auditoria), esses limites do plano gratuito do Firebase (Spark) são bastante generosos para o uso cotidiano, mas existem alguns pontos de atenção que você deve conhecer.
+Aqui está o que esses limites significam, na prática, dentro do seu sistema:
+1. Leituras (50.000 por dia) — As consultas de dados
+Cada vez que o aplicativo busca informações no banco de dados para mostrar na tela, isso conta como uma "leitura" por documento (cada pessoa, usuário ou log é um documento).
+Na prática: Se você tem 500 membros cadastrados no banco de dados:
+Sempre que você abre o aplicativo ou atualiza a página (F5), o sistema busca esses 500 registros para exibi-los na tela de Membros. Isso consome 500 leituras.
+Se você acessar a tela de Logs de Auditoria e ela tiver 100 registros salvos, o sistema consome mais 100 leituras para exibir esse histórico.
+O que isso significa? Com 500 membros, você e sua equipe poderiam abrir ou recarregar o aplicativo cerca de 100 vezes em um único dia antes de atingir o limite diário de 50.000 leituras (
+).
+Dica de ouro: O Firestore possui um sistema inteligente de cache no navegador, o que ajuda a evitar leituras repetidas se os dados não mudaram, economizando sua cota.
+2. Gravações/Escritas (20.000 por dia) — Inserções e alterações
+Qualquer ação de salvar, editar ou criar novos dados no sistema consome gravações.
+No uso diário manual (Muito econômico):
+Cadastrar um novo membro manualmente = 1 gravação.
+Editar uma informação (mudar telefone, atualizar a jornada espiritual, marcar uma aula concluída) = 1 gravação.
+Como agora o sistema gera um Log de Auditoria automático para cada alteração, cada edição manual gastará na verdade 2 gravações (1 para atualizar o membro + 1 para criar o registro do log). Mesmo assim, para fazer 20.000 gravações manualmente, você precisaria fazer 10.000 edições por dia, o que é humanamente impossível!
+Na Importação de Planilha (Ponto de Atenção):
+Se você subir uma planilha com 1.000 pessoas:
+Para cada pessoa nova ou modificada que o sistema atualizar no banco, haverá 1 gravação para o membro + 1 gravação para o log de alteração dela.
+Se 300 pessoas tiverem dados atualizados ou novos na planilha, essa importação consumirá 600 gravações.
+O que isso significa? Você pode importar planilhas grandes tranquilamente, mas evite fazer múltiplos uploads da mesma planilha gigante várias vezes no mesmo dia sem necessidade.
+3. Exclusões (20.000 por dia) — Apagar dados
+Conta toda vez que você deleta um registro do sistema.
+Na prática: Se você excluir um membro ou clicar em "Limpar Banco de Dados".
+O que isso significa? Como a exclusão de membros é algo raro no dia a dia, você dificilmente chegará perto desse limite de 20.000 por dia.
+Resumo e Recomendação:
+Para o uso normal: O plano gratuito é mais do que suficiente para o seu gerenciamento diário (consultar membros, atualizar presenças, ver aniversariantes e registrar logs).
+Para importações: Quando for atualizar os dados via planilha, tente fazer isso de forma consolidada (por exemplo, uma ou duas vezes por semana, ou quando tiver muitas mudanças acumuladas), em vez de subir a planilha a cada pequena alteração individual. Isso garante que suas cotas diárias fiquem sempre bem longe do limite!

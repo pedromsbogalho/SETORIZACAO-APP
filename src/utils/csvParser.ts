@@ -50,7 +50,37 @@ export function parseCSV(text: string): Partial<Person>[] {
   
   // Remove BOM if present (essential for UTF-8 CSVs from Excel)
   const cleanText = text.replace(/^\uFEFF/, '');
-  const lines = cleanText.split(/\r?\n/);
+  if (!cleanText.trim()) return [];
+
+  // ─── Parser de linhas que respeita aspas ─────────────────────────────────
+  // O split simples por \n quebra membros com campo "Ocorrência" multi-linha
+  // (ex: "25/06/2005 - OUTORGA DE SHOKO\n29/06/2013 - OUTORGA DE OHIKARI").
+  // Esta função só divide quando encontra \n FORA de aspas duplas.
+  const splitLinesRespectingQuotes = (raw: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQ = false;
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '"') {
+        inQ = !inQ;
+        current += ch;
+      } else if (ch === '\n' && !inQ) {
+        result.push(current);
+        current = '';
+      } else if (ch === '\r' && !inQ) {
+        if (i + 1 < raw.length && raw[i + 1] === '\n') i++;
+        result.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current) result.push(current);
+    return result;
+  };
+
+  const lines = splitLinesRespectingQuotes(cleanText);
   if (lines.length < 2) return [];
 
   // Detect delimiter based on the first line (header)
@@ -58,12 +88,12 @@ export function parseCSV(text: string): Partial<Person>[] {
   let delimiter = ',';
   let commaCount = 0;
   let semiCount = 0;
-  let inQuotes = false;
+  let inQHeader = false;
   for (let i = 0; i < headerLine.length; i++) {
     const char = headerLine[i];
-    if (char === '"' || char === "'") {
-      inQuotes = !inQuotes;
-    } else if (!inQuotes) {
+    if (char === '"') {
+      inQHeader = !inQHeader;
+    } else if (!inQHeader) {
       if (char === ',') commaCount++;
       if (char === ';') semiCount++;
     }
@@ -78,16 +108,22 @@ export function parseCSV(text: string): Partial<Person>[] {
     let inQuotes = false;
     for (let charIdx = 0; charIdx < line.length; charIdx++) {
       const char = line[charIdx];
-      if (char === '"' || char === "'") {
-        inQuotes = !inQuotes;
+      if (char === '"') {
+        // Suporte a aspas duplas escapadas ("")
+        if (inQuotes && line[charIdx + 1] === '"') {
+          currentVal += '"';
+          charIdx++;
+        } else {
+          inQuotes = !inQuotes;
+        }
       } else if (char === delim && !inQuotes) {
-        values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+        values.push(currentVal.trim().replace(/^"|"$/g, ''));
         currentVal = '';
       } else {
         currentVal += char;
       }
     }
-    values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+    values.push(currentVal.trim().replace(/^"|"$/g, ''));
     return values;
   };
 
@@ -298,4 +334,3 @@ export function generateSampleCSVString(): string {
 1313280;MARIA APARECIDA REIS;Ohikari;MEMBRO;ATIVO;22727;64;12981112233;12981112233;maria.cida@yahoo.com.br;2026-06-21 08:30:11;AVENIDA IPANEMA, 500;MINISTRO ROBERTO;SUL;CARLOS;AVENIDA IPANEMA, 500 - INDAIÁ - Caraguatatuba;Indaiá;43230;8 anos e 1 mês;2018;FAM-202
 1313281;JOÃO SILVA GOMES;Primeiro Contato;FREQUENTADOR;ATIVO;37200;24;12993049182;12993049182;joao.silva@outlook.com;2026-06-10 17:15:00;RUA DAS FLORES, 202;MINISTRA CLARA;LESTE;MARTA;RUA DAS FLORES, 202 - JARDIM AMÉRICA - Caraguatatuba;Jardim América;;;2026;FAM-303`;
 }
-
