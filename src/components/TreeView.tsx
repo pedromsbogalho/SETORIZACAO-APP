@@ -238,7 +238,7 @@ export default function TreeView({ people, families, structure, isDark, currentU
                                           <div className="flex items-center gap-1.5 text-xxs">
                                             <Home className="w-3 h-3 text-emerald-500" />
                                             <span className="font-medium text-slate-700 dark:text-zinc-300">
-                                              {famName} <span className="text-zinc-400 font-normal">({famId})</span>
+                                              {famName}
                                             </span>
                                           </div>
                                           <div className="flex items-center gap-1">
