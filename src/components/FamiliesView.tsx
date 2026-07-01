@@ -74,12 +74,16 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
   const filteredAndSortedFamilies = useMemo(() => {
     return families
       .filter(f => {
-        // Text search: matches family name, ID, or address
+        // Text search: matches family name, ID, address, or any member's name
         const term = searchTerm.toLowerCase();
+        const familyMembers = people.filter(p => p.idFamilia === f.id);
+        const matchesMemberName = familyMembers.some(p => p.nome.toLowerCase().includes(term));
         const matchesSearch = 
+          !term ||
           f.nome.toLowerCase().includes(term) || 
           f.id.toLowerCase().includes(term) || 
-          f.endereco.toLowerCase().includes(term);
+          f.endereco.toLowerCase().includes(term) ||
+          matchesMemberName;
 
         // Sector filter
         let matchesSector = false;
