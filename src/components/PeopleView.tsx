@@ -493,8 +493,10 @@ export default function PeopleView({
           valB = b.nome || '';
           break;
         case 'tempoMembro':
-          valA = a.tempoMembro || '';
-          valB = b.tempoMembro || '';
+          // Ordena pela data de outorga real (YYYY-MM-DD) para garantir ordem cronológica correta
+          // "mais tempo" = data mais antiga = menor valor de string ISO
+          valA = a.dataOutorga || '9999-99-99'; // sem data vai pro fim
+          valB = b.dataOutorga || '9999-99-99';
           break;
 
         case 'setor2':
@@ -791,8 +793,22 @@ export default function PeopleView({
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-mono">
-                      {person.tempoMembro || <span className="text-zinc-400 italic">N/A</span>}
+                    <td className="py-3 px-4">
+                      <div className="font-mono text-xs">
+                        {person.tempoMembro || <span className="text-zinc-400 italic">N/A</span>}
+                      </div>
+                      {person.dataOutorga && (
+                        <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                          Outorga: {(() => {
+                            const d = person.dataOutorga;
+                            if (!d) return '';
+                            // Formata YYYY-MM-DD → DD/MM/YYYY
+                            const parts = d.split('-');
+                            if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                            return d;
+                          })()}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3 px-4">
