@@ -744,20 +744,6 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                             );
                           })}
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-mono uppercase text-zinc-400">Detalhes sobre Purificações e Aprimoramento</label>
-                          <input
-                            type="text"
-                            value={getJornadaMembro(selectedPerson).purificacoes.descricao || ''}
-                            onChange={(e) => {
-                              const pState = getJornadaMembro(selectedPerson).purificacoes;
-                              handleUpdateJornadaMembro({ purificacoes: { ...pState, descricao: e.target.value } });
-                            }}
-                            placeholder="Descreva brevemente o momento atual do membro..."
-                            className={`w-full p-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none`}
-                          />
-                        </div>
-
                         <div className="space-y-3 mt-4">
                           <div className="flex items-center justify-between gap-2">
                             <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Purificação</label>
@@ -821,22 +807,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                           <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Orientações Ministeriais</h4>
                         </div>
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-[9px] font-mono uppercase text-zinc-400 block mb-1">Principais Orientações Recebidas</label>
-                            <textarea
-                              rows={3}
-                              value={getJornadaMembro(selectedPerson).orientacoes.texto || ''}
-                              onChange={(e) => {
-                                const oState = getJornadaMembro(selectedPerson).orientacoes;
-                                handleUpdateJornadaMembro({ orientacoes: { ...oState, texto: e.target.value } });
-                              }}
-                              placeholder="Anote as orientações passadas pelo Ministro ou Responsável..."
-                              className={`w-full p-2 text-xs rounded-lg border leading-relaxed resize-none ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none`}
-                            />
-                          </div>
-
-                          <div className="space-y-3">
+                        <div className="space-y-3">
                             <div className="flex items-center justify-between gap-2">
                               <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Orientações</label>
                               <span className="text-[10px] text-zinc-400">{getJornadaMembro(selectedPerson).orientacoes.comentarios.length} comentário(s)</span>
