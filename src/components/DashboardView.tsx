@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Person, Family } from '../types';
 import { Users, Shield, Compass, AlertTriangle, TrendingUp, Home, Award } from 'lucide-react';
 
@@ -147,6 +147,89 @@ export default function DashboardView({
     noSectorCount +
     noPhoneCount;
 
+  // ── Outorgas por mês (últimos 24 meses com dados) ────────────────────────
+  const outorgasByMonth = useMemo(() => {
+    const map: Record<string, number> = {};
+    people.forEach(p => {
+      if (!p.dataOutorga) return;
+      // dataOutorga pode estar em YYYY-MM-DD ou DD/MM/YYYY
+      let iso = p.dataOutorga.trim();
+      if (iso.includes('/')) {
+        const parts = iso.split('/');
+        if (parts.length === 3 && parts[2].length === 4) {
+          iso = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+        }
+      }
+      const monthKey = iso.substring(0, 7); // YYYY-MM
+      if (/^\d{4}-\d{2}$/.test(monthKey)) {
+        map[monthKey] = (map[monthKey] || 0) + 1;
+      }
+    });
+    // Ordenar por data e pegar os últimos 24 meses com dados
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-24)
+      .map(([month, count]) => {
+        const [year, m] = month.split('-');
+        const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        return { key: month, label: `${monthNames[parseInt(m)-1]}/${year.slice(2)}`, count };
+      });
+  }, [people]);
+
+  // ── Outorgas por setor ─────────────────────────────────────────────────────
+  const outorgasBySector = useMemo(() => {
+    const map: Record<string, number> = {};
+    people.forEach(p => {
+      if (!p.dataOutorga || p.subtipoCadastro !== 'MEMBRO') return;
+      const setor = p.setor2 || 'SEM SETOR';
+      map[setor] = (map[setor] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([setor, count]) => ({ setor, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [people]);
+
+  const maxOutorgaMonth = Math.max(...outorgasByMonth.map(m => m.count), 1);
+  const maxOutorgaSector = Math.max(...outorgasBySector.map(s => s.count), 1);
+
+  // Filtro de setor para o gráfico mensal
+  const [outorgaSectorFilter, setOutorgaSectorFilter] = useState<string>('TODOS');
+
+  const outorgasByMonthFiltered = useMemo(() => {
+    if (outorgaSectorFilter === 'TODOS') return outorgasByMonth;
+    const map: Record<string, number> = {};
+    people
+      .filter(p => p.dataOutorga && (p.setor2 || 'SEM SETOR') === outorgaSectorFilter)
+      .forEach(p => {
+        let iso = (p.dataOutorga || '').trim();
+        if (iso.includes('/')) {
+          const parts = iso.split('/');
+          if (parts.length === 3 && parts[2].length === 4)
+            iso = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+        }
+        const monthKey = iso.substring(0, 7);
+        if (/^\d{4}-\d{2}$/.test(monthKey)) map[monthKey] = (map[monthKey] || 0) + 1;
+      });
+    const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-24)
+      .map(([month, count]) => {
+        const [year, m] = month.split('-');
+        return { key: month, label: `${monthNames[parseInt(m)-1]}/${year.slice(2)}`, count };
+      });
+  }, [people, outorgaSectorFilter, outorgasByMonth]);
+
+  const maxFiltered = Math.max(...outorgasByMonthFiltered.map(m => m.count), 1);
+  const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
+  const [hoveredSector, setHoveredSector] = useState<string | null>(null);
+
+  const allSectorsForFilter = useMemo(() => {
+    const set = new Set(people.filter(p => p.setor2).map(p => p.setor2!));
+    return Array.from(set).sort();
+  }, [people]);
+
+  // Journey stage distribution
   // Journey stage distribution
   const journeyStagesMap: Record<string, number> = {};
   people.forEach(p => {
@@ -356,6 +439,136 @@ export default function DashboardView({
           <p className="text-xxs text-zinc-400 font-mono text-center pt-2 border-t border-slate-200/40 dark:border-white/5">
             Mostrando os bairros com maior concentração.
           </p>
+        </div>
+      </div>
+
+      {/* ── Gráfico de Outorgas ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Gráfico de barras: Outorgas por mês */}
+        <div className="lg:col-span-2 p-5 rounded-xl glass-panel shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2 border-b border-slate-200/40 dark:border-white/5">
+            <div>
+              <h4 className="font-sans font-semibold text-sm flex items-center gap-2 text-slate-800 dark:text-zinc-200">
+                <Award className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                Outorgas por Mês
+              </h4>
+              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                Total geral: {people.filter(p => p.dataOutorga).length} outorgas registradas
+              </p>
+            </div>
+            {/* Filtro de setor */}
+            <select
+              value={outorgaSectorFilter}
+              onChange={e => setOutorgaSectorFilter(e.target.value)}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-200 focus:outline-none"
+            >
+              <option value="TODOS">Todos os Setores</option>
+              {allSectorsForFilter.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {outorgasByMonthFiltered.length === 0 ? (
+            <div className="h-40 flex items-center justify-center text-zinc-400 italic text-sm">
+              Nenhuma outorga registrada com data válida.
+            </div>
+          ) : (
+            <div className="relative">
+              {/* Tooltip */}
+              {hoveredMonth && (() => {
+                const item = outorgasByMonthFiltered.find(m => m.key === hoveredMonth);
+                return item ? (
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-zinc-900 text-white text-[11px] font-mono rounded-lg shadow-lg pointer-events-none whitespace-nowrap">
+                    {item.label}: <strong>{item.count}</strong> outorga{item.count !== 1 ? 's' : ''}
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Barras */}
+              <div className="flex items-end gap-1 h-48 overflow-x-auto pb-6 pt-6">
+                {outorgasByMonthFiltered.map(item => {
+                  const heightPct = (item.count / maxFiltered) * 100;
+                  const isHovered = hoveredMonth === item.key;
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex flex-col items-center flex-shrink-0 group cursor-pointer"
+                      style={{ minWidth: outorgasByMonthFiltered.length > 16 ? '28px' : '36px' }}
+                      onMouseEnter={() => setHoveredMonth(item.key)}
+                      onMouseLeave={() => setHoveredMonth(null)}
+                    >
+                      <div className="w-full flex items-end" style={{ height: '140px' }}>
+                        <div
+                          className={`w-full rounded-t-md transition-all duration-200 ${isHovered ? 'bg-teal-500' : 'bg-teal-600/70'}`}
+                          style={{ height: `${Math.max(heightPct, 3)}%` }}
+                        />
+                      </div>
+                      <span className={`text-[9px] font-mono mt-1 rotate-45 origin-left whitespace-nowrap ${isHovered ? 'text-teal-600 font-bold' : 'text-zinc-400'}`}>
+                        {item.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Linhas de grade */}
+              <div className="absolute inset-x-0 top-6 bottom-6 pointer-events-none flex flex-col justify-between">
+                {[maxFiltered, Math.round(maxFiltered * 0.5), 0].map(val => (
+                  <div key={val} className="flex items-center gap-1">
+                    <span className="text-[9px] font-mono text-zinc-300 w-4 text-right">{val}</span>
+                    <div className="flex-1 border-t border-slate-200/30 dark:border-white/5" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Barras horizontais: Outorgas por setor */}
+        <div className="p-5 rounded-xl glass-panel shadow-sm space-y-4">
+          <div className="pb-2 border-b border-slate-200/40 dark:border-white/5">
+            <h4 className="font-sans font-semibold text-sm flex items-center gap-2 text-slate-800 dark:text-zinc-200">
+              <Compass className="w-4 h-4 text-orange-500" />
+              Outorgas por Setor
+            </h4>
+            <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+              Membros com Ohikari por setor
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {outorgasBySector.map(item => {
+              const pct = (item.count / maxOutorgaSector) * 100;
+              const isHov = hoveredSector === item.setor;
+              return (
+                <div
+                  key={item.setor}
+                  className="space-y-1 cursor-default"
+                  onMouseEnter={() => setHoveredSector(item.setor)}
+                  onMouseLeave={() => setHoveredSector(null)}
+                >
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className={`truncate ${isHov ? 'text-teal-600 dark:text-teal-400' : ''}`}>
+                      {item.setor}
+                    </span>
+                    <span className="font-mono text-zinc-400 text-[11px] ml-2 flex-shrink-0">
+                      {item.count}
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-100/60 dark:bg-zinc-800/40 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${isHov ? 'bg-teal-500' : 'bg-teal-600/75'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            {outorgasBySector.length === 0 && (
+              <p className="text-xs text-zinc-400 italic text-center py-4">Sem dados de outorga por setor.</p>
+            )}
+          </div>
         </div>
       </div>
 
