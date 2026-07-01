@@ -102,10 +102,10 @@ function PeriodSelector({ preset, onPresetChange, custom, onCustomChange, isDark
               type="button"
               onClick={() => onPresetChange(p.key)}
               className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all duration-200 cursor-pointer ${active
-                  ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30'
-                  : isDark
-                    ? 'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80 border border-white/5'
-                    : 'bg-white/70 text-slate-600 hover:bg-white border border-slate-200/60'
+                ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30'
+                : isDark
+                  ? 'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80 border border-white/5'
+                  : 'bg-white/70 text-slate-600 hover:bg-white border border-slate-200/60'
                 }`}
             >
               {p.label}
@@ -294,47 +294,84 @@ export default function DashboardView({
     noSectorCount +
     noPhoneCount;
 
-  // ── Outorgas por mês (últimos 24 meses com dados) ────────────────────────
+  // ── Outorgas no período selecionado ──────────────────────────────────────
+  // Lista de pessoas com outorga dentro do período atual
+  const outorgasNoPeriodo = useMemo(() => {
+    return people
+      .map(p => ({ p, d: parseOutorgaDate(p.dataOutorga) }))
+      .filter(({ p, d }) => d && d >= currentRange.from && d <= currentRange.to);
+  }, [people, currentRange]);
+
+  const totalOutorgasPeriodo = outorgasNoPeriodo.length;
+  const membrosOutorgadosPeriodo = outorgasNoPeriodo.filter(({ p }) => p.subtipoCadastro === 'MEMBRO').length;
+
+  // Período anterior com a mesma duração, para calcular variação
+  const previousRange = useMemo(() => {
+    const duration = currentRange.to.getTime() - currentRange.from.getTime();
+    const to = new Date(currentRange.from.getTime() - 1);
+    const from = new Date(to.getTime() - duration);
+    return { from, to };
+  }, [currentRange]);
+
+  const totalOutorgasAnterior = useMemo(() => {
+    return people.filter(p => {
+      const d = parseOutorgaDate(p.dataOutorga);
+      return d && d >= previousRange.from && d <= previousRange.to;
+    }).length;
+  }, [people, previousRange]);
+
+  const variacao = totalOutorgasAnterior > 0
+    ? Math.round(((totalOutorgasPeriodo - totalOutorgasAnterior) / totalOutorgasAnterior) * 100)
+    : (totalOutorgasPeriodo > 0 ? 100 : 0);
+
+  // Meses distintos no período (para média)
+  const mesesNoPeriodo = useMemo(() => {
+    const set = new Set<string>();
+    outorgasNoPeriodo.forEach(({ d }) => {
+      if (d) set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    });
+    return Math.max(set.size, 1);
+  }, [outorgasNoPeriodo]);
+  const mediaMensal = Math.round((totalOutorgasPeriodo / mesesNoPeriodo) * 10) / 10;
+
+  // Outorgas por mês (dentro do período, agrupado por bucket)
   const outorgasByMonth = useMemo(() => {
     const map: Record<string, number> = {};
-    people.forEach(p => {
-      if (!p.dataOutorga) return;
-      // dataOutorga pode estar em YYYY-MM-DD ou DD/MM/YYYY
-      let iso = p.dataOutorga.trim();
-      if (iso.includes('/')) {
-        const parts = iso.split('/');
-        if (parts.length === 3 && parts[2].length === 4) {
-          iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-        }
-      }
-      const monthKey = iso.substring(0, 7); // YYYY-MM
-      if (/^\d{4}-\d{2}$/.test(monthKey)) {
-        map[monthKey] = (map[monthKey] || 0) + 1;
-      }
+    outorgasNoPeriodo.forEach(({ d }) => {
+      const k = `${d!.getFullYear()}-${String(d!.getMonth() + 1).padStart(2, '0')}`;
+      map[k] = (map[k] || 0) + 1;
     });
-    // Ordenar por data e pegar os últimos 24 meses com dados
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-24)
-      .map(([month, count]) => {
-        const [year, m] = month.split('-');
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-        return { key: month, label: `${monthNames[parseInt(m) - 1]}/${year.slice(2)}`, count };
-      });
-  }, [people]);
+    // Gerar todos os buckets do período (mesmo os com zero)
+    const buckets: string[] = [];
+    const cursor = new Date(currentRange.from.getFullYear(), currentRange.from.getMonth(), 1);
+    const end = new Date(currentRange.to.getFullYear(), currentRange.to.getMonth(), 1);
+    while (cursor <= end) {
+      const k = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+      buckets.push(k);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    return buckets.map(k => {
+      const [year, m] = k.split('-');
+      return { key: k, label: `${monthNames[parseInt(m) - 1]}/${year.slice(2)}`, count: map[k] || 0 };
+    });
+  }, [outorgasNoPeriodo, currentRange]);
 
-  // ── Outorgas por setor ─────────────────────────────────────────────────────
+  // Outorgas por setor (filtrado pelo período, considerando todos os setores conhecidos)
   const outorgasBySector = useMemo(() => {
     const map: Record<string, number> = {};
-    people.forEach(p => {
-      if (!p.dataOutorga || p.subtipoCadastro !== 'MEMBRO') return;
+    outorgasNoPeriodo.forEach(({ p }) => {
       const setor = p.setor2 || 'SEM SETOR';
       map[setor] = (map[setor] || 0) + 1;
     });
+    // Garante que setores conhecidos apareçam com 0
+    const allSectors = new Set<string>();
+    people.forEach(p => allSectors.add(p.setor2 || 'SEM SETOR'));
+    allSectors.forEach(s => { if (!(s in map)) map[s] = 0; });
     return Object.entries(map)
       .map(([setor, count]) => ({ setor, count }))
       .sort((a, b) => b.count - a.count);
-  }, [people]);
+  }, [outorgasNoPeriodo, people]);
 
   const maxOutorgaMonth = Math.max(...outorgasByMonth.map(m => m.count), 1);
   const maxOutorgaSector = Math.max(...outorgasBySector.map(s => s.count), 1);
@@ -344,28 +381,17 @@ export default function DashboardView({
 
   const outorgasByMonthFiltered = useMemo(() => {
     if (outorgaSectorFilter === 'TODOS') return outorgasByMonth;
-    const map: Record<string, number> = {};
-    people
-      .filter(p => p.dataOutorga && (p.setor2 || 'SEM SETOR') === outorgaSectorFilter)
-      .forEach(p => {
-        let iso = (p.dataOutorga || '').trim();
-        if (iso.includes('/')) {
-          const parts = iso.split('/');
-          if (parts.length === 3 && parts[2].length === 4)
-            iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-        }
-        const monthKey = iso.substring(0, 7);
-        if (/^\d{4}-\d{2}$/.test(monthKey)) map[monthKey] = (map[monthKey] || 0) + 1;
-      });
-    const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-24)
-      .map(([month, count]) => {
-        const [year, m] = month.split('-');
-        return { key: month, label: `${monthNames[parseInt(m) - 1]}/${year.slice(2)}`, count };
-      });
-  }, [people, outorgaSectorFilter, outorgasByMonth]);
+    return outorgasByMonth.map(m => ({
+      ...m,
+      count: outorgasNoPeriodo.filter(({ p, d }) => {
+        const setor = p.setor2 || 'SEM SETOR';
+        if (setor !== outorgaSectorFilter) return false;
+        if (!d) return false;
+        const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return k === m.key;
+      }).length,
+    }));
+  }, [outorgasByMonth, outorgaSectorFilter, outorgasNoPeriodo]);
 
   const maxFiltered = Math.max(...outorgasByMonthFiltered.map(m => m.count), 1);
   const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
@@ -439,7 +465,7 @@ export default function DashboardView({
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>+{novosEsteMes} novos este mês</span>
+            <span>+{novosNoPeriodo} {periodPreset === 'CURRENT_MONTH' ? 'novos este mês' : 'no período'}</span>
           </div>
         </button>
 
@@ -589,25 +615,25 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* ── Gráfico de Outorgas ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Gráfico de barras: Outorgas por mês */}
-        <div className="lg:col-span-2 p-5 rounded-xl glass-panel shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2 border-b border-slate-200/40 dark:border-white/5">
+      {/* ── Painel de Outorgas ────────────────────────────────────────────── */}
+      <div className="p-5 rounded-xl glass-panel shadow-sm space-y-5">
+        {/* Cabeçalho + seletor de período */}
+        <div className="flex flex-col gap-3 pb-3 border-b border-slate-200/40 dark:border-white/5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h4 className="font-sans font-semibold text-sm flex items-center gap-2 text-slate-800 dark:text-zinc-200">
                 <Award className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                Outorgas por Mês
+                Outorgas — Visão Geral
               </h4>
-              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
-                Total geral: {people.filter(p => p.dataOutorga).length} outorgas registradas
+              <p className="text-[11px] text-zinc-400 font-mono mt-1 flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                Período: <span className="text-slate-600 dark:text-zinc-300 font-semibold capitalize">{currentRange.label}</span>
               </p>
             </div>
-            {/* Filtro de setor */}
             <select
               value={outorgaSectorFilter}
               onChange={e => setOutorgaSectorFilter(e.target.value)}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-200 focus:outline-none"
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-200 focus:outline-none cursor-pointer"
             >
               <option value="TODOS">Todos os Setores</option>
               {allSectorsForFilter.map(s => (
@@ -615,106 +641,135 @@ export default function DashboardView({
               ))}
             </select>
           </div>
-
-          {outorgasByMonthFiltered.length === 0 ? (
-            <div className="h-40 flex items-center justify-center text-zinc-400 italic text-sm">
-              Nenhuma outorga registrada com data válida.
-            </div>
-          ) : (
-            <div className="relative">
-              {/* Tooltip */}
-              {hoveredMonth && (() => {
-                const item = outorgasByMonthFiltered.find(m => m.key === hoveredMonth);
-                return item ? (
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-zinc-900 text-white text-[11px] font-mono rounded-lg shadow-lg pointer-events-none whitespace-nowrap">
-                    {item.label}: <strong>{item.count}</strong> outorga{item.count !== 1 ? 's' : ''}
-                  </div>
-                ) : null;
-              })()}
-
-              {/* Barras */}
-              <div className="flex items-end gap-1 h-48 overflow-x-auto pb-6 pt-6">
-                {outorgasByMonthFiltered.map(item => {
-                  const heightPct = (item.count / maxFiltered) * 100;
-                  const isHovered = hoveredMonth === item.key;
-                  return (
-                    <div
-                      key={item.key}
-                      className="flex flex-col items-center flex-shrink-0 group cursor-pointer"
-                      style={{ minWidth: outorgasByMonthFiltered.length > 16 ? '28px' : '36px' }}
-                      onMouseEnter={() => setHoveredMonth(item.key)}
-                      onMouseLeave={() => setHoveredMonth(null)}
-                    >
-                      <div className="w-full flex items-end" style={{ height: '140px' }}>
-                        <div
-                          className={`w-full rounded-t-md transition-all duration-200 ${isHovered ? 'bg-teal-500' : 'bg-teal-600/70'}`}
-                          style={{ height: `${Math.max(heightPct, 3)}%` }}
-                        />
-                      </div>
-                      <span className={`text-[9px] font-mono mt-1 rotate-45 origin-left whitespace-nowrap ${isHovered ? 'text-teal-600 font-bold' : 'text-zinc-400'}`}>
-                        {item.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Linhas de grade */}
-              <div className="absolute inset-x-0 top-6 bottom-6 pointer-events-none flex flex-col justify-between">
-                {[maxFiltered, Math.round(maxFiltered * 0.5), 0].map(val => (
-                  <div key={val} className="flex items-center gap-1">
-                    <span className="text-[9px] font-mono text-zinc-300 w-4 text-right">{val}</span>
-                    <div className="flex-1 border-t border-slate-200/30 dark:border-white/5" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <PeriodSelector
+            preset={periodPreset}
+            onPresetChange={setPeriodPreset}
+            custom={periodCustom}
+            onCustomChange={setPeriodCustom}
+            isDark={isDark}
+          />
         </div>
 
-        {/* Barras horizontais: Outorgas por setor */}
-        <div className="p-5 rounded-xl glass-panel shadow-sm space-y-4">
-          <div className="pb-2 border-b border-slate-200/40 dark:border-white/5">
-            <h4 className="font-sans font-semibold text-sm flex items-center gap-2 text-slate-800 dark:text-zinc-200">
-              <Compass className="w-4 h-4 text-orange-500" />
-              Outorgas por Setor
-            </h4>
-            <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
-              Membros com Ohikari por setor
-            </p>
+        {/* KPIs do período */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-4 rounded-xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/20 border border-teal-100/60 dark:border-teal-900/40">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-teal-700 dark:text-teal-400">Total no período</p>
+            <h3 className="text-3xl font-sans font-bold tracking-tight mt-1 text-teal-700 dark:text-teal-300">{totalOutorgasPeriodo}</h3>
+            <p className="text-[10px] text-zinc-500 mt-1">outorgas registradas</p>
+          </div>
+          <div className="p-4 rounded-xl bg-white/40 dark:bg-zinc-900/30 border border-slate-200/40 dark:border-white/5">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Membros outorgados</p>
+            <h3 className="text-3xl font-sans font-bold tracking-tight mt-1 text-slate-800 dark:text-zinc-100">{membrosOutorgadosPeriodo}</h3>
+            <p className="text-[10px] text-zinc-500 mt-1">subtipo MEMBRO</p>
+          </div>
+          <div className="p-4 rounded-xl bg-white/40 dark:bg-zinc-900/30 border border-slate-200/40 dark:border-white/5">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Variação</p>
+            <h3 className={`text-3xl font-sans font-bold tracking-tight mt-1 flex items-center gap-1 ${variacao >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+              {variacao >= 0 ? '+' : ''}{variacao}%
+            </h3>
+            <p className="text-[10px] text-zinc-500 mt-1">vs. período anterior</p>
+          </div>
+          <div className="p-4 rounded-xl bg-white/40 dark:bg-zinc-900/30 border border-slate-200/40 dark:border-white/5">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Média mensal</p>
+            <h3 className="text-3xl font-sans font-bold tracking-tight mt-1 text-slate-800 dark:text-zinc-100">{mediaMensal}</h3>
+            <p className="text-[10px] text-zinc-500 mt-1">outorgas / mês</p>
+          </div>
+        </div>
+
+        {/* Gráfico de barras + lista por setor */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 p-4 rounded-xl bg-white/30 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5 space-y-3">
+            <h5 className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-teal-600" />
+              Outorgas por mês
+            </h5>
+            {outorgasByMonthFiltered.every(m => m.count === 0) ? (
+              <div className="h-40 flex items-center justify-center text-zinc-400 italic text-sm">
+                Nenhuma outorga registrada no período.
+              </div>
+            ) : (
+              <div className="relative">
+                {hoveredMonth && (() => {
+                  const item = outorgasByMonthFiltered.find(m => m.key === hoveredMonth);
+                  return item ? (
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-zinc-900 text-white text-[11px] font-mono rounded-lg shadow-lg pointer-events-none whitespace-nowrap">
+                      {item.label}: <strong>{item.count}</strong> outorga{item.count !== 1 ? 's' : ''}
+                    </div>
+                  ) : null;
+                })()}
+                <div className="flex items-end gap-1 h-48 overflow-x-auto pb-6 pt-6">
+                  {outorgasByMonthFiltered.map(item => {
+                    const heightPct = (item.count / maxFiltered) * 100;
+                    const isHovered = hoveredMonth === item.key;
+                    return (
+                      <div
+                        key={item.key}
+                        className="flex flex-col items-center flex-shrink-0 group cursor-pointer"
+                        style={{ minWidth: outorgasByMonthFiltered.length > 16 ? '28px' : '36px' }}
+                        onMouseEnter={() => setHoveredMonth(item.key)}
+                        onMouseLeave={() => setHoveredMonth(null)}
+                      >
+                        <div className="w-full flex items-end" style={{ height: '140px' }}>
+                          <div
+                            className={`w-full rounded-t-md transition-all duration-200 ${isHovered ? 'bg-teal-500' : 'bg-teal-600/70'}`}
+                            style={{ height: `${Math.max(heightPct, item.count > 0 ? 3 : 1)}%`, opacity: item.count === 0 ? 0.25 : 1 }}
+                          />
+                        </div>
+                        <span className={`text-[9px] font-mono mt-1 rotate-45 origin-left whitespace-nowrap ${isHovered ? 'text-teal-600 font-bold' : 'text-zinc-400'}`}>
+                          {item.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="absolute inset-x-0 top-6 bottom-6 pointer-events-none flex flex-col justify-between">
+                  {[maxFiltered, Math.round(maxFiltered * 0.5), 0].map(val => (
+                    <div key={val} className="flex items-center gap-1">
+                      <span className="text-[9px] font-mono text-zinc-300 w-4 text-right">{val}</span>
+                      <div className="flex-1 border-t border-slate-200/30 dark:border-white/5" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="space-y-3">
-            {outorgasBySector.map(item => {
-              const pct = (item.count / maxOutorgaSector) * 100;
-              const isHov = hoveredSector === item.setor;
-              return (
-                <div
-                  key={item.setor}
-                  className="space-y-1 cursor-default"
-                  onMouseEnter={() => setHoveredSector(item.setor)}
-                  onMouseLeave={() => setHoveredSector(null)}
-                >
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className={`truncate ${isHov ? 'text-teal-600 dark:text-teal-400' : ''}`}>
-                      {item.setor}
-                    </span>
-                    <span className="font-mono text-zinc-400 text-[11px] ml-2 flex-shrink-0">
-                      {item.count}
-                    </span>
+          <div className="p-4 rounded-xl bg-white/30 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5 space-y-3">
+            <h5 className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-orange-500" />
+              Por setor (no período)
+            </h5>
+            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+              {outorgasBySector.map(item => {
+                const pct = maxOutorgaSector > 0 ? (item.count / maxOutorgaSector) * 100 : 0;
+                const pctOfTotal = totalOutorgasPeriodo > 0 ? Math.round((item.count / totalOutorgasPeriodo) * 100) : 0;
+                const isHov = hoveredSector === item.setor;
+                return (
+                  <div
+                    key={item.setor}
+                    className="space-y-1 cursor-default"
+                    onMouseEnter={() => setHoveredSector(item.setor)}
+                    onMouseLeave={() => setHoveredSector(null)}
+                  >
+                    <div className="flex justify-between text-[11px] font-semibold">
+                      <span className={`truncate ${isHov ? 'text-teal-600 dark:text-teal-400' : ''}`}>{item.setor}</span>
+                      <span className="font-mono text-zinc-400 ml-2 flex-shrink-0">
+                        {item.count} <span className="text-[10px] text-zinc-400/70">({pctOfTotal}%)</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-100/60 dark:bg-zinc-800/40 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${isHov ? 'bg-teal-500' : item.count === 0 ? 'bg-slate-300/40 dark:bg-zinc-700/40' : 'bg-teal-600/75'}`}
+                        style={{ width: `${Math.max(pct, item.count > 0 ? 4 : 1)}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full h-3 bg-slate-100/60 dark:bg-zinc-800/40 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${isHov ? 'bg-teal-500' : 'bg-teal-600/75'}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            {outorgasBySector.length === 0 && (
-              <p className="text-xs text-zinc-400 italic text-center py-4">Sem dados de outorga por setor.</p>
-            )}
+                );
+              })}
+              {outorgasBySector.length === 0 && (
+                <p className="text-xs text-zinc-400 italic text-center py-4">Sem dados de outorga por setor.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
