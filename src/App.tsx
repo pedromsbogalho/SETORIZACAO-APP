@@ -256,6 +256,100 @@ export default function App() {
     return enrichPeopleWithFamilyIds(cleaned);
   };
 
+  const chooseString = (existing: string, incoming?: string): string => {
+    if (incoming === undefined || incoming === null) return existing;
+    const normalized = incoming.toString().trim();
+    return normalized === '' ? existing : incoming;
+  };
+
+  const mergePersonData = (existing: Person, incoming: Partial<Person>): Person => {
+    const mergedJornadaDatas = {
+      ...existing.jornadaDatas,
+      ...incoming.jornadaDatas
+    };
+
+    const mergedCursoIniciacao = {
+      ...existing.cursoIniciacao,
+      ...incoming.cursoIniciacao
+    };
+
+    const mergedCursoPosOutorga = {
+      aulas: {
+        ...existing.cursoPosOutorga.aulas,
+        ...incoming.cursoPosOutorga?.aulas
+      },
+      instrutores: {
+        ...(existing.cursoPosOutorga.instrutores || {}),
+        ...(incoming.cursoPosOutorga?.instrutores || {})
+      },
+      observacoesComentarios: existing.cursoPosOutorga?.observacoesComentarios?.length
+        ? existing.cursoPosOutorga.observacoesComentarios
+        : incoming.cursoPosOutorga?.observacoesComentarios
+    };
+
+    const mergedGruposWhats = {
+      ...existing.gruposWhats,
+      ...incoming.gruposWhats
+    };
+
+    const mergedJornadaMembro = existing.jornadaMembro || incoming.jornadaMembro
+      ? {
+          ...(existing.jornadaMembro || {}),
+          ...(incoming.jornadaMembro || {}),
+          purificacoes: {
+            ...existing.jornadaMembro?.purificacoes,
+            ...incoming.jornadaMembro?.purificacoes
+          },
+          orientacoes: {
+            ...existing.jornadaMembro?.orientacoes,
+            ...incoming.jornadaMembro?.orientacoes
+          }
+        }
+      : undefined;
+
+    return {
+      ...existing,
+      ...incoming,
+      nome: chooseString(existing.nome, incoming.nome),
+      tipoCadastro: chooseString(existing.tipoCadastro, incoming.tipoCadastro),
+      statusAtual: chooseString(existing.statusAtual, incoming.statusAtual),
+      nascimento: chooseString(existing.nascimento, incoming.nascimento),
+      celularPrincipal: chooseString(existing.celularPrincipal, incoming.celularPrincipal),
+      telefoneContato: chooseString(existing.telefoneContato, incoming.telefoneContato),
+      email: chooseString(existing.email, incoming.email),
+      ultimoAcessoApp: chooseString(existing.ultimoAcessoApp, incoming.ultimoAcessoApp),
+      endCompleto: chooseString(existing.endCompleto, incoming.endCompleto),
+      am: chooseString(existing.am, incoming.am),
+      setor2: chooseString(existing.setor2, incoming.setor2),
+      af2: chooseString(existing.af2, incoming.af2),
+      endGoogle: chooseString(existing.endGoogle, incoming.endGoogle),
+      bairroAjustado: chooseString(existing.bairroAjustado, incoming.bairroAjustado),
+      dataOutorga: chooseString(existing.dataOutorga, incoming.dataOutorga),
+      tempoMembro: chooseString(existing.tempoMembro, incoming.tempoMembro),
+      anoOutorga: chooseString(existing.anoOutorga?.toString() || '', incoming.anoOutorga?.toString()),
+      idFamilia: chooseString(existing.idFamilia, incoming.idFamilia),
+      jornadaEtapa: existing.jornadaEtapa || incoming.jornadaEtapa || existing.jornadaEtapa,
+      jornadaDatas: mergedJornadaDatas,
+      cursoIniciacao: mergedCursoIniciacao,
+      cursoPosOutorga: mergedCursoPosOutorga,
+      gruposWhats: mergedGruposWhats,
+      jornadaMembro: mergedJornadaMembro
+    };
+  };
+
+  const mergeImportedPeople = (current: Person[], importedPeople: Person[]): Person[] => {
+    const peopleMap = new Map(current.map(p => [p.id, p]));
+    importedPeople.forEach(imp => {
+      const existing = peopleMap.get(imp.id);
+      if (existing) {
+        peopleMap.set(existing.id, mergePersonData(existing, imp));
+      } else {
+        peopleMap.set(imp.id, imp);
+      }
+    });
+    return Array.from(peopleMap.values());
+  };
+
   // Load from Firebase on application start depending on authentication
   useEffect(() => {
     let unsubscribeRealtime: (() => void) | null = null;
@@ -704,13 +798,15 @@ export default function App() {
         return;
       }
       const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
-      setPeople(enriched);
-      localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
+      const merged = mergeImportedPeople(people, enriched);
+      setPeople(merged);
+      localStorage.setItem('jc_people_shared', JSON.stringify(merged));
+      localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(merged));
       setOnboardingError('');
       setOnboardingCSV('');
       try {
-        await savePeopleBatchToFirebase(currentUser.uid, enriched);
-        alert(`${enriched.length} registros cadastrados e salvos na nuvem com sucesso!`);
+        await savePeopleBatchToFirebase(currentUser.uid, merged);
+        alert(`${merged.length} registros cadastrados e salvos na nuvem com sucesso!`);
       } catch (err) {
         console.error("Error syncing imported CSV to Firebase:", err);
         alert(`${enriched.length} registros cadastrados localmente (erro ao salvar na nuvem).`);
@@ -746,13 +842,15 @@ export default function App() {
             const parsed = parseCSV(text);
             if (parsed.length > 0) {
               const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
-              setPeople(enriched);
-              localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
+              const merged = mergeImportedPeople(people, enriched);
+              setPeople(merged);
+              localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(merged));
+              localStorage.setItem('jc_people_shared', JSON.stringify(merged));
               setOnboardingError('');
               setOnboardingCSV('');
               try {
-                await savePeopleBatchToFirebase(currentUser.uid, enriched);
-                alert(`${enriched.length} registros importados e salvos na nuvem com sucesso via arrastar e soltar!`);
+                await savePeopleBatchToFirebase(currentUser.uid, merged);
+                alert(`${merged.length} registros importados e salvos na nuvem com sucesso via arrastar e soltar!`);
               } catch (err) {
                 console.error("Error syncing dropped CSV to Firebase:", err);
                 alert(`${enriched.length} registros importados localmente (erro ao sincronizar na nuvem).`);
@@ -784,13 +882,15 @@ export default function App() {
         const parsed = parseCSV(text);
         if (parsed.length > 0) {
           const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
-          setPeople(enriched);
-          localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(enriched));
+          const merged = mergeImportedPeople(people, enriched);
+          setPeople(merged);
+          localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(merged));
+          localStorage.setItem('jc_people_shared', JSON.stringify(merged));
           setOnboardingError('');
           setOnboardingCSV('');
           try {
-            await savePeopleBatchToFirebase(currentUser.uid, enriched);
-            alert(`${enriched.length} registros importados e salvos na nuvem com sucesso!`);
+            await savePeopleBatchToFirebase(currentUser.uid, merged);
+            alert(`${merged.length} registros importados e salvos na nuvem com sucesso!`);
           } catch (err) {
             console.error("Error syncing uploaded CSV to Firebase:", err);
             alert(`${enriched.length} registros salvos localmente (erro ao salvar na nuvem).`);

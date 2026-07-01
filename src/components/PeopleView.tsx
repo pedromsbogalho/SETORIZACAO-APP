@@ -325,13 +325,11 @@ export default function PeopleView({
           peopleMap.set(imp.id, {
             ...existing,
             ...imp,
-            // Preserve spiritual journey stage & dates if they already exist
             jornadaEtapa: existing.jornadaEtapa || imp.jornadaEtapa,
             jornadaDatas: {
               ...imp.jornadaDatas,
               ...existing.jornadaDatas
             },
-            // Preserve course controls progress
             cursoIniciacao: {
               ...imp.cursoIniciacao,
               ...existing.cursoIniciacao
@@ -340,13 +338,33 @@ export default function PeopleView({
               aulas: {
                 ...imp.cursoPosOutorga?.aulas,
                 ...existing.cursoPosOutorga?.aulas
-              }
+              },
+              instrutores: {
+                ...(existing.cursoPosOutorga?.instrutores || {}),
+                ...(imp.cursoPosOutorga?.instrutores || {})
+              },
+              observacoesComentarios: existing.cursoPosOutorga?.observacoesComentarios?.length
+                ? existing.cursoPosOutorga.observacoesComentarios
+                : imp.cursoPosOutorga?.observacoesComentarios
             },
-            // Preserve WhatsApp groups status
             gruposWhats: {
               ...imp.gruposWhats,
               ...existing.gruposWhats
-            }
+            },
+            jornadaMembro: existing.jornadaMembro
+              ? {
+                  ...existing.jornadaMembro,
+                  ...imp.jornadaMembro,
+                  purificacoes: {
+                    ...existing.jornadaMembro?.purificacoes,
+                    ...imp.jornadaMembro?.purificacoes
+                  },
+                  orientacoes: {
+                    ...existing.jornadaMembro?.orientacoes,
+                    ...imp.jornadaMembro?.orientacoes
+                  }
+                }
+              : imp.jornadaMembro
           });
         } else {
           peopleMap.set(imp.id, imp);
