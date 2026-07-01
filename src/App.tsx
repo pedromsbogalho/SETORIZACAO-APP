@@ -836,6 +836,13 @@ export default function App() {
       setOnboardingCSV('');
       try {
         await savePeopleBatchToFirebase(currentUser.uid, merged);
+        await logActionToFirebase(
+          currentUser.uid,
+          currentUser.email || '',
+          currentAppUser?.displayName,
+          'IMPORTAR_BASE',
+          `Importou uma base de ${merged.length} registros via CSV.`,
+        );
         alert(`${merged.length} registros cadastrados e salvos na nuvem com sucesso!`);
       } catch (err) {
         console.error("Error syncing imported CSV to Firebase:", err);
@@ -880,6 +887,13 @@ export default function App() {
               setOnboardingCSV('');
               try {
                 await savePeopleBatchToFirebase(currentUser.uid, merged);
+                await logActionToFirebase(
+                  currentUser.uid,
+                  currentUser.email || '',
+                  currentAppUser?.displayName,
+                  'IMPORTAR_BASE',
+                  `Importou uma base de ${merged.length} registros via arrastar e soltar.`,
+                );
                 alert(`${merged.length} registros importados e salvos na nuvem com sucesso via arrastar e soltar!`);
               } catch (err) {
                 console.error("Error syncing dropped CSV to Firebase:", err);
@@ -920,6 +934,13 @@ export default function App() {
           setOnboardingCSV('');
           try {
             await savePeopleBatchToFirebase(currentUser.uid, merged);
+            await logActionToFirebase(
+              currentUser.uid,
+              currentUser.email || '',
+              currentAppUser?.displayName,
+              'IMPORTAR_BASE',
+              `Importou uma base de ${merged.length} registros via upload de arquivo CSV.`,
+            );
             alert(`${merged.length} registros importados e salvos na nuvem com sucesso!`);
           } catch (err) {
             console.error("Error syncing uploaded CSV to Firebase:", err);
