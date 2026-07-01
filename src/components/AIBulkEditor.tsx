@@ -2,9 +2,15 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Person } from '../types';
 import { Sparkles, Bot, Send, X, ChevronUp, ChevronDown, CheckCircle, AlertTriangle, Undo2, CornerDownLeft, Info } from 'lucide-react';
 
+interface UpdatePeopleOptions {
+  skipAuditLogs?: boolean;
+  batchAction?: string;
+  batchDetails?: string;
+}
+
 interface AIBulkEditorProps {
   people: Person[];
-  onUpdatePeople: (newPeople: Person[]) => void;
+  onUpdatePeople: (newPeople: Person[], options?: UpdatePeopleOptions) => void;
   activeTab: string;
   isDark: boolean;
 }

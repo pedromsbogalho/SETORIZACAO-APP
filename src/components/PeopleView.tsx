@@ -8,9 +8,15 @@ import { Person, SubtipoCadastro, StatusAtual, JornadaEtapa, JohreiCenterStructu
 import { Search, UserPlus, Upload, FileText, Trash2, Edit2, Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { parseCSV, generateSampleCSVString } from '../utils/csvParser';
 
+interface UpdatePeopleOptions {
+  skipAuditLogs?: boolean;
+  batchAction?: string;
+  batchDetails?: string;
+}
+
 interface PeopleViewProps {
   people: Person[];
-  onUpdatePeople: (newPeople: Person[]) => void;
+  onUpdatePeople: (newPeople: Person[], options?: UpdatePeopleOptions) => void;
   isDark: boolean;
   currentUserRole: 'ADMIN' | 'AM';
   currentAMName?: string;
@@ -371,7 +377,11 @@ export default function PeopleView({
         }
       });
 
-      onUpdatePeople(Array.from(peopleMap.values()));
+      onUpdatePeople(Array.from(peopleMap.values()), {
+        skipAuditLogs: true,
+        batchAction: 'IMPORTAR_PESSOAS',
+        batchDetails: `Importou ${finalImported.length} registros via planilha de membros.`
+      });
       setIsImportModalOpen(false);
       setCsvText('');
       setErrorMsg('');

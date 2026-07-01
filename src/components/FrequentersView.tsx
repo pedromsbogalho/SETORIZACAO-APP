@@ -8,9 +8,15 @@ import { Person, SubtipoCadastro, StatusAtual, JornadaEtapa, JohreiCenterStructu
 import { Search, UserPlus, Upload, FileText, Trash2, Edit2, Download, Filter, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react';
 import { parseCSV, generateSampleCSVString } from '../utils/csvParser';
 
+interface UpdatePeopleOptions {
+  skipAuditLogs?: boolean;
+  batchAction?: string;
+  batchDetails?: string;
+}
+
 interface FrequentersViewProps {
   people: Person[];
-  onUpdatePeople: (newPeople: Person[]) => void;
+  onUpdatePeople: (newPeople: Person[], options?: UpdatePeopleOptions) => void;
   isDark: boolean;
   currentUserRole: 'ADMIN' | 'AM';
   currentAMName?: string;
@@ -322,7 +328,11 @@ export default function FrequentersView({
         }
       });
 
-      onUpdatePeople(Array.from(peopleMap.values()));
+      onUpdatePeople(Array.from(peopleMap.values()), {
+        skipAuditLogs: true,
+        batchAction: 'IMPORTAR_FREQUENTADORES',
+        batchDetails: `Importou ${finalImported.length} registros via planilha de frequentadores.`
+      });
       setIsImportModalOpen(false);
       setCsvText('');
       setErrorMsg('');

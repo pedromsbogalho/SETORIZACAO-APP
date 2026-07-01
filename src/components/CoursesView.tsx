@@ -7,9 +7,15 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Person, ComentarioJornada } from '../types';
 import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle, Clock, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
+interface UpdatePeopleOptions {
+  skipAuditLogs?: boolean;
+  batchAction?: string;
+  batchDetails?: string;
+}
+
 interface CoursesViewProps {
   people: Person[];
-  onUpdatePeople: (newPeople: Person[]) => void;
+  onUpdatePeople: (newPeople: Person[], options?: UpdatePeopleOptions) => void;
   isDark: boolean;
   currentUserName?: string;
 }

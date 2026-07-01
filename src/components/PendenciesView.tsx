@@ -7,9 +7,15 @@ import React, { useState } from 'react';
 import { Person, Family, Visit } from '../types';
 import { AlertTriangle, CheckCircle, Smartphone, Mail, Globe, Users, Home, Map, BookOpen, Clock, HelpCircle } from 'lucide-react';
 
+interface UpdatePeopleOptions {
+  skipAuditLogs?: boolean;
+  batchAction?: string;
+  batchDetails?: string;
+}
+
 interface PendenciesViewProps {
   people: Person[];
-  onUpdatePeople: (newPeople: Person[]) => void;
+  onUpdatePeople: (newPeople: Person[], options?: UpdatePeopleOptions) => void;
   families: Family[];
   onUpdateFamilies: (newFamilies: Family[]) => void;
   isDark: boolean;

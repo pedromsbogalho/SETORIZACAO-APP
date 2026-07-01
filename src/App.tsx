@@ -596,9 +596,16 @@ export default function App() {
   }, [people]);
 
   // Sync to LocalStorage & Firebase (Differential/Granular Sync)
-  const handleUpdatePeople = async (newPeople: Person[]) => {
+  const handleUpdatePeople = async (
+    newPeople: Person[],
+    options?: { skipAuditLogs?: boolean; batchAction?: string; batchDetails?: string }
+  ) => {
     if (!currentUser) return;
     const enriched = cleanSanitizeAndEnrichPeople(newPeople);
+
+    const skipAuditLogs = options?.skipAuditLogs ?? false;
+    const batchAction = options?.batchAction;
+    const batchDetails = options?.batchDetails;
 
     // Identifica apenas os registros que foram alterados, adicionados ou deletados
     const changedPeople: Person[] = [];
@@ -612,7 +619,7 @@ export default function App() {
       const existing = currentPeopleMap.get(p.id);
       if (!existing) {
         changedPeople.push(p);
-        if (enriched.length > 0 && people.length > 0) { // Avoid logging initial loads
+        if (!skipAuditLogs && enriched.length > 0 && people.length > 0) {
           logActionToFirebase(
             currentUser.uid,
             currentUser.email || '',
@@ -625,25 +632,27 @@ export default function App() {
         }
       } else if (JSON.stringify(existing) !== JSON.stringify(p)) {
         changedPeople.push(p);
-        const existingPerson = existing as Person;
-        const changes: string[] = [];
-        if (existingPerson.nome !== p.nome) changes.push(`Nome alterado de "${existingPerson.nome}" para "${p.nome}"`);
-        if (existingPerson.statusAtual !== p.statusAtual) changes.push(`Status alterado de "${existingPerson.statusAtual}" para "${p.statusAtual}"`);
-        if (existingPerson.setor2 !== p.setor2) changes.push(`Setor alterado de "${existingPerson.setor2}" para "${p.setor2}"`);
-        if (existingPerson.subtipoCadastro !== p.subtipoCadastro) changes.push(`Tipo de cadastro alterado de "${existingPerson.subtipoCadastro}" para "${p.subtipoCadastro}"`);
-        if (existingPerson.am !== p.am) changes.push(`AM alterado de "${existingPerson.am || 'Nenhum'}" para "${p.am || 'Nenhum'}"`);
-        if (existingPerson.af2 !== p.af2) changes.push(`AF alterado de "${existingPerson.af2 || 'Nenhum'}" para "${p.af2 || 'Nenhum'}"`);
+        if (!skipAuditLogs) {
+          const existingPerson = existing as Person;
+          const changes: string[] = [];
+          if (existingPerson.nome !== p.nome) changes.push(`Nome alterado de "${existingPerson.nome}" para "${p.nome}"`);
+          if (existingPerson.statusAtual !== p.statusAtual) changes.push(`Status alterado de "${existingPerson.statusAtual}" para "${p.statusAtual}"`);
+          if (existingPerson.setor2 !== p.setor2) changes.push(`Setor alterado de "${existingPerson.setor2}" para "${p.setor2}"`);
+          if (existingPerson.subtipoCadastro !== p.subtipoCadastro) changes.push(`Tipo de cadastro alterado de "${existingPerson.subtipoCadastro}" para "${p.subtipoCadastro}"`);
+          if (existingPerson.am !== p.am) changes.push(`AM alterado de "${existingPerson.am || 'Nenhum'}" para "${p.am || 'Nenhum'}"`);
+          if (existingPerson.af2 !== p.af2) changes.push(`AF alterado de "${existingPerson.af2 || 'Nenhum'}" para "${p.af2 || 'Nenhum'}"`);
 
-        const details = changes.length > 0 ? changes.join(', ') : 'Informações da ficha atualizadas';
-        logActionToFirebase(
-          currentUser.uid,
-          currentUser.email || '',
-          currentAppUser?.displayName,
-          'EDITAR_PESSOA',
-          `Editou dados de ${p.nome}: ${details}.`,
-          p.id,
-          p.nome
-        );
+          const details = changes.length > 0 ? changes.join(', ') : 'Informações da ficha atualizadas';
+          logActionToFirebase(
+            currentUser.uid,
+            currentUser.email || '',
+            currentAppUser?.displayName,
+            'EDITAR_PESSOA',
+            `Editou dados de ${p.nome}: ${details}.`,
+            p.id,
+            p.nome
+          );
+        }
       }
     });
 
@@ -652,15 +661,17 @@ export default function App() {
     people.forEach(p => {
       if (!enrichedIds.has(p.id)) {
         deletedIds.push(p.id);
-        logActionToFirebase(
-          currentUser.uid,
-          currentUser.email || '',
-          currentAppUser?.displayName,
-          'EXCLUIR_PESSOA',
-          `Excluiu o membro ${p.nome} (${p.subtipoCadastro}) do setor ${p.setor2 || 'Sem Setor'}.`,
-          p.id,
-          p.nome
-        );
+        if (!skipAuditLogs) {
+          logActionToFirebase(
+            currentUser.uid,
+            currentUser.email || '',
+            currentAppUser?.displayName,
+            'EXCLUIR_PESSOA',
+            `Excluiu o membro ${p.nome} (${p.subtipoCadastro}) do setor ${p.setor2 || 'Sem Setor'}.`,
+            p.id,
+            p.nome
+          );
+        }
       }
     });
 
@@ -675,19 +686,38 @@ export default function App() {
         // Se houver mais de 15 alterações, usa gravação em lote (ex: importação, carga demo ou edição em massa por IA)
         if (changedPeople.length > 15) {
           await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
-          await logActionToFirebase(
-            currentUser.uid,
-            currentUser.email || '',
-            currentAppUser?.displayName,
-            'EDITAR_PESSOA',
-            `Sincronização/Importação de dados em lote: processou ${changedPeople.length} registros.`
-          );
+          if (!skipAuditLogs) {
+            await logActionToFirebase(
+              currentUser.uid,
+              currentUser.email || '',
+              currentAppUser?.displayName,
+              'EDITAR_PESSOA',
+              `Sincronização/Importação de dados em lote: processou ${changedPeople.length} registros.`
+            );
+          } else if (batchAction) {
+            await logActionToFirebase(
+              currentUser.uid,
+              currentUser.email || '',
+              currentAppUser?.displayName,
+              batchAction,
+              batchDetails || `Importação de ${changedPeople.length} registros.`,
+            );
+          }
         } else {
           // Grava cada modificação individualmente de forma paralela para economizar cota de escrita
           await Promise.all([
             ...changedPeople.map(p => savePersonToFirebase(currentUser.uid, p)),
             ...deletedIds.map(id => deletePersonFromFirebase(currentUser.uid, id))
           ]);
+          if (skipAuditLogs && batchAction) {
+            await logActionToFirebase(
+              currentUser.uid,
+              currentUser.email || '',
+              currentAppUser?.displayName,
+              batchAction,
+              batchDetails || `Importação de ${changedPeople.length} registros.`,
+            );
+          }
         }
       }
     } catch (err) {
