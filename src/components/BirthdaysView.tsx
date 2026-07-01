@@ -188,6 +188,19 @@ export default function BirthdaysView({ people, isDark }: BirthdaysViewProps) {
     return `https://wa.me/${cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone}?text=${message}`;
   };
 
+  const formatOutorgaDate = (value?: string) => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+
+    return trimmed;
+  };
+
   return (
     <div className="space-y-6">
       {/* HEADER SECTION */}
@@ -515,6 +528,18 @@ export default function BirthdaysView({ people, isDark }: BirthdaysViewProps) {
                   </div>
 
                   <div className="space-y-0.5 pt-1 text-[10px] text-zinc-400 font-mono">
+                    {item.person.setor2 && (
+                      <p className="flex items-center gap-1">
+                        <Hash className="w-3 h-3 text-zinc-500" />
+                        Setor: {item.person.setor2}
+                      </p>
+                    )}
+                    {item.person.dataOutorga && (
+                      <p className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-zinc-500" />
+                        Outorga: {formatOutorgaDate(item.person.dataOutorga)}
+                      </p>
+                    )}
                     {item.person.nascimento && (
                       <p className="flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-zinc-500" />
