@@ -1,5 +1,87 @@
 import { GoogleGenAI } from "@google/genai";
 
+function parseYearValue(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const matchYMD = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (matchYMD) return Number(matchYMD[1]);
+
+  const matchDMY = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (matchDMY) return Number(matchDMY[3]);
+
+  const matchYearOnly = text.match(/\b(19|20)\d{2}\b/);
+  if (matchYearOnly) return Number(matchYearOnly[0]);
+
+  return null;
+}
+
+function getPersonOutorgaYear(person: any): number | null {
+  return parseYearValue(person?.dataOutorga) ?? parseYearValue(person?.anoOutorga) ?? null;
+}
+
+function getFallbackBulkEditUpdates(prompt: string, people: any[], viewContext?: string) {
+  const normalizedPrompt = prompt.toLowerCase();
+  const mentionsPostOutorga = /pós-outorga|pos-outorga|pós outorga|pos outorga|curso pós|curso pos|pós-?outorga/.test(normalizedPrompt);
+  const mentionsReset = /(não iniciou|nao iniciou|sem conclus|sem conclusão|sem conclusao|resetar|reset)/.test(normalizedPrompt);
+  const mentionsConcluded = /(conclu(?:í|i)da|concluida|concluído|concluido)/.test(normalizedPrompt);
+  const mentionsInProgress = /(em andamento|em-andamento|andamento)/.test(normalizedPrompt);
+
+  if (!mentionsPostOutorga || !mentionsReset) {
+    return null;
+  }
+
+  const targetStatus = mentionsConcluded ? 'Concluído' : mentionsInProgress ? 'Em andamento' : 'Não iniciou';
+  const requestedLessons = [1, 2, 3, 4, 5];
+  const yearMatch = prompt.match(/\b(19|20)\d{2}\b/);
+  const thresholdYear = yearMatch ? Number(yearMatch[0]) : null;
+
+  const matchedPeople = people.filter((person: any) => {
+    if (!mentionsPostOutorga) return false;
+
+    if (thresholdYear !== null) {
+      const personYear = getPersonOutorgaYear(person);
+      if (personYear === null) return false;
+      return personYear >= thresholdYear;
+    }
+
+    return true;
+  });
+
+  if (matchedPeople.length === 0) {
+    return {
+      success: true,
+      explanation: 'Nenhum membro correspondeu aos critérios informados. Nenhuma alteração foi realizada.',
+      updates: []
+    };
+  }
+
+  const updates = matchedPeople.map((person: any) => {
+    const aulas: Record<string, string> = {};
+    requestedLessons.forEach((lessonNumber) => {
+      aulas[String(lessonNumber)] = targetStatus;
+    });
+
+    return {
+      id: person.id,
+      updates: {
+        cursoPosOutorga: {
+          aulas
+        }
+      }
+    };
+  });
+
+  const yearSuffix = thresholdYear ? ` para outorgados a partir de ${thresholdYear}` : '';
+  return {
+    success: true,
+    explanation: `Atualizei o progresso de ${matchedPeople.length} pessoa(s) para ${targetStatus.toLowerCase()} no curso pós-outorga${yearSuffix}.`,
+    updates
+  };
+}
+
 export default async function handler(req: any, res: any) {
   // CORS support
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -22,6 +104,11 @@ export default async function handler(req: any, res: any) {
     const { prompt, people, viewContext } = req.body;
     if (!prompt || !people) {
       return res.status(400).json({ error: "Faltam parâmetros obrigatórios: 'prompt' e 'people'" });
+    }
+
+    const fallbackResponse = getFallbackBulkEditUpdates(prompt, people, viewContext);
+    if (fallbackResponse) {
+      return res.status(200).json(fallbackResponse);
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
