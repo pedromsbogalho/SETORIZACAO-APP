@@ -60,10 +60,12 @@ export function getJornadaMembro(person?: Person): JornadaMembro {
       financeiro: !!j.purificacoes?.financeiro,
       outros: !!j.purificacoes?.outros,
       descricao: j.purificacoes?.descricao || '',
+      comentarios: Array.isArray(j.purificacoes?.comentarios) ? j.purificacoes.comentarios : []
     },
     orientacoes: {
       texto: j.orientacoes?.texto || '',
       cumprindo: j.orientacoes?.cumprindo || 'Não se aplica',
+      comentarios: Array.isArray(j.orientacoes?.comentarios) ? j.orientacoes.comentarios : []
     }
   };
 }
@@ -72,6 +74,8 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
   const [selectedPersonId, setSelectedPersonId] = useState<string>(people[0]?.id || '');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [activeTab, setActiveTab] = useState<'FREQUENTADOR' | 'MEMBRO'>('FREQUENTADOR');
+  const [purificacoesComment, setPurificacoesComment] = useState('');
+  const [orientacoesComment, setOrientacoesComment] = useState('');
 
   // Advanced filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -753,6 +757,62 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                             className={`w-full p-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none`}
                           />
                         </div>
+
+                        <div className="space-y-3 mt-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Purificação</label>
+                            <span className="text-[10px] text-zinc-400">{getJornadaMembro(selectedPerson).purificacoes.comentarios.length} comentário(s)</span>
+                          </div>
+                          <div className="space-y-2">
+                            <textarea
+                              rows={2}
+                              value={purificacoesComment}
+                              onChange={(e) => setPurificacoesComment(e.target.value)}
+                              placeholder="Registrar um comentário sobre o acompanhamento deste membro..."
+                              className={`w-full p-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none resize-none`}
+                            />
+                            <button
+                              onClick={() => {
+                                handleAddComentario('purificacoes', purificacoesComment);
+                                setPurificacoesComment('');
+                              }}
+                              disabled={!purificacoesComment.trim()}
+                              className={`px-3 py-2 rounded-lg text-[10px] font-semibold uppercase transition-all ${purificacoesComment.trim()
+                                  ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                  : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                }`}
+                            >
+                              Adicionar comentário
+                            </button>
+                          </div>
+
+                          {getJornadaMembro(selectedPerson).purificacoes.comentarios.length > 0 ? (
+                            <div className="space-y-3 pt-2 border-t border-slate-200/50 dark:border-white/10">
+                              {getJornadaMembro(selectedPerson).purificacoes.comentarios.map((comment) => (
+                                <div key={comment.id} className="rounded-2xl bg-white dark:bg-zinc-900 p-3 border border-slate-200/50 dark:border-white/10 shadow-sm">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{comment.autorNome || 'Usuário'}</p>
+                                      <p className="text-[10px] text-zinc-500">{formatComentarioTimestamp(comment.createdAt)}</p>
+                                    </div>
+                                    {canDeleteComentario(comment) && (
+                                      <button
+                                        onClick={() => handleDeleteComentario('purificacoes', comment.id)}
+                                        title="Excluir comentário"
+                                        className="text-zinc-400 hover:text-red-500"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="mt-3 text-[11px] text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-zinc-500 italic">Ainda não há comentários nesta seção.</p>
+                          )}
+                        </div>
                       </div>
 
                       {/* Orientations */}
@@ -774,6 +834,62 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                               placeholder="Anote as orientações passadas pelo Ministro ou Responsável..."
                               className={`w-full p-2 text-xs rounded-lg border leading-relaxed resize-none ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none`}
                             />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Orientações</label>
+                              <span className="text-[10px] text-zinc-400">{getJornadaMembro(selectedPerson).orientacoes.comentarios.length} comentário(s)</span>
+                            </div>
+                            <div className="space-y-2">
+                              <textarea
+                                rows={2}
+                                value={orientacoesComment}
+                                onChange={(e) => setOrientacoesComment(e.target.value)}
+                                placeholder="Registrar um novo comentário de orientação..."
+                                className={`w-full p-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none resize-none`}
+                              />
+                              <button
+                                onClick={() => {
+                                  handleAddComentario('orientacoes', orientacoesComment);
+                                  setOrientacoesComment('');
+                                }}
+                                disabled={!orientacoesComment.trim()}
+                                className={`px-3 py-2 rounded-lg text-[10px] font-semibold uppercase transition-all ${orientacoesComment.trim()
+                                    ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                    : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                  }`}
+                              >
+                                Adicionar comentário
+                              </button>
+                            </div>
+
+                            {getJornadaMembro(selectedPerson).orientacoes.comentarios.length > 0 ? (
+                              <div className="space-y-3 pt-2 border-t border-slate-200/50 dark:border-white/10">
+                                {getJornadaMembro(selectedPerson).orientacoes.comentarios.map((comment) => (
+                                  <div key={comment.id} className="rounded-2xl bg-white dark:bg-zinc-900 p-3 border border-slate-200/50 dark:border-white/10 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="space-y-1">
+                                        <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{comment.autorNome || 'Usuário'}</p>
+                                        <p className="text-[10px] text-zinc-500">{formatComentarioTimestamp(comment.createdAt)}</p>
+                                      </div>
+                                      {canDeleteComentario(comment) && (
+                                        <button
+                                          onClick={() => handleDeleteComentario('orientacoes', comment.id)}
+                                          title="Excluir comentário"
+                                          className="text-zinc-400 hover:text-red-500"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <p className="mt-3 text-[11px] text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[10px] text-zinc-500 italic">Ainda não há comentários nesta seção.</p>
+                            )}
                           </div>
 
                           <div>
