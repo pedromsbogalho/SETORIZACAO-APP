@@ -808,60 +808,59 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Orientações Ministeriais</h4>
                         </div>
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Orientações</label>
-                              <span className="text-[10px] text-zinc-400">{getJornadaMembro(selectedPerson).orientacoes.comentarios.length} comentário(s)</span>
-                            </div>
-                            <div className="space-y-2">
-                              <textarea
-                                rows={2}
-                                value={orientacoesComment}
-                                onChange={(e) => setOrientacoesComment(e.target.value)}
-                                placeholder="Registrar um novo comentário de orientação..."
-                                className={`w-full p-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none resize-none`}
-                              />
-                              <button
-                                onClick={() => {
-                                  handleAddComentario('orientacoes', orientacoesComment);
-                                  setOrientacoesComment('');
-                                }}
-                                disabled={!orientacoesComment.trim()}
-                                className={`px-3 py-2 rounded-lg text-[10px] font-semibold uppercase transition-all ${orientacoesComment.trim()
-                                    ? 'bg-teal-600 text-white hover:bg-teal-700'
-                                    : 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                                  }`}
-                              >
-                                Adicionar comentário
-                              </button>
-                            </div>
-
-                            {getJornadaMembro(selectedPerson).orientacoes.comentarios.length > 0 ? (
-                              <div className="space-y-3 pt-2 border-t border-slate-200/50 dark:border-white/10">
-                                {getJornadaMembro(selectedPerson).orientacoes.comentarios.map((comment) => (
-                                  <div key={comment.id} className="rounded-2xl bg-white dark:bg-zinc-900 p-3 border border-slate-200/50 dark:border-white/10 shadow-sm">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="space-y-1">
-                                        <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{comment.autorNome || 'Usuário'}</p>
-                                        <p className="text-[10px] text-zinc-500">{formatComentarioTimestamp(comment.createdAt)}</p>
-                                      </div>
-                                      {canDeleteComentario(comment) && (
-                                        <button
-                                          onClick={() => handleDeleteComentario('orientacoes', comment.id)}
-                                          title="Excluir comentário"
-                                          className="text-zinc-400 hover:text-red-500"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      )}
-                                    </div>
-                                    <p className="mt-3 text-[11px] text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-[10px] text-zinc-500 italic">Ainda não há comentários nesta seção.</p>
-                            )}
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Orientações</label>
+                            <span className="text-[10px] text-zinc-400">{getJornadaMembro(selectedPerson).orientacoes.comentarios.length} comentário(s)</span>
                           </div>
+                          <div className="space-y-2">
+                            <textarea
+                              rows={2}
+                              value={orientacoesComment}
+                              onChange={(e) => setOrientacoesComment(e.target.value)}
+                              placeholder="Registrar um novo comentário de orientação..."
+                              className={`w-full p-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none resize-none`}
+                            />
+                            <button
+                              onClick={() => {
+                                handleAddComentario('orientacoes', orientacoesComment);
+                                setOrientacoesComment('');
+                              }}
+                              disabled={!orientacoesComment.trim()}
+                              className={`px-3 py-2 rounded-lg text-[10px] font-semibold uppercase transition-all ${orientacoesComment.trim()
+                                ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                              }`}
+                            >
+                              Adicionar comentário
+                            </button>
+                          </div>
+
+                          {getJornadaMembro(selectedPerson).orientacoes.comentarios.length > 0 ? (
+                            <div className="space-y-3 pt-2 border-t border-slate-200/50 dark:border-white/10">
+                              {getJornadaMembro(selectedPerson).orientacoes.comentarios.map((comment) => (
+                                <div key={comment.id} className="rounded-2xl bg-white dark:bg-zinc-900 p-3 border border-slate-200/50 dark:border-white/10 shadow-sm">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{comment.autorNome || 'Usuário'}</p>
+                                      <p className="text-[10px] text-zinc-500">{formatComentarioTimestamp(comment.createdAt)}</p>
+                                    </div>
+                                    {canDeleteComentario(comment) && (
+                                      <button
+                                        onClick={() => handleDeleteComentario('orientacoes', comment.id)}
+                                        title="Excluir comentário"
+                                        className="text-zinc-400 hover:text-red-500"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="mt-3 text-[11px] text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-zinc-500 italic">Ainda não há comentários nesta seção.</p>
+                          )}
 
                           <div>
                             <label className="text-[9px] font-mono uppercase text-zinc-400 block mb-1">Cumprindo as orientações de fé?</label>
@@ -876,9 +875,9 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                                       handleUpdateJornadaMembro({ orientacoes: { ...oState, cumprindo: option } });
                                     }}
                                     className={`py-1 rounded-lg text-[9px] font-bold uppercase border transition-all text-center cursor-pointer ${isSelected
-                                        ? 'bg-teal-500 border-teal-500 text-white font-bold'
-                                        : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-650'
-                                      }`}
+                                      ? 'bg-teal-500 border-teal-500 text-white font-bold'
+                                      : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-650'
+                                    }`}
                                   >
                                     {option}
                                   </button>
