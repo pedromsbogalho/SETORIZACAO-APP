@@ -5,7 +5,134 @@
 
 import React, { useState, useMemo } from 'react';
 import { Person, Family } from '../types';
-import { Users, Shield, Compass, AlertTriangle, TrendingUp, Home, Award } from 'lucide-react';
+import { Users, Shield, Compass, AlertTriangle, TrendingUp, Home, Award, Calendar } from 'lucide-react';
+
+type PeriodPreset = 'CURRENT_MONTH' | 'PREVIOUS_MONTH' | 'LAST_2_MONTHS' | 'LAST_3_MONTHS' | 'CURRENT_YEAR' | 'CUSTOM';
+
+const PERIOD_PRESETS: { key: PeriodPreset; label: string }[] = [
+  { key: 'CURRENT_MONTH', label: 'Mês atual' },
+  { key: 'PREVIOUS_MONTH', label: 'Mês anterior' },
+  { key: 'LAST_2_MONTHS', label: 'Últimos 2 meses' },
+  { key: 'LAST_3_MONTHS', label: 'Últimos 3 meses' },
+  { key: 'CURRENT_YEAR', label: 'Ano atual' },
+  { key: 'CUSTOM', label: 'Personalizado' },
+];
+
+function periodToRange(preset: PeriodPreset, custom: { from: string; to: string }): { from: Date; to: Date; label: string } {
+  const now = new Date();
+  const to = new Date();
+  const from = new Date();
+  let label = '';
+
+  switch (preset) {
+    case 'CURRENT_MONTH':
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      label = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      break;
+    case 'PREVIOUS_MONTH': {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      from.setTime(prev.getTime());
+      to.setTime(new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).getTime());
+      label = prev.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      break;
+    }
+    case 'LAST_2_MONTHS':
+      from.setMonth(now.getMonth() - 1);
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      label = 'Últimos 2 meses';
+      break;
+    case 'LAST_3_MONTHS':
+      from.setMonth(now.getMonth() - 2);
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      label = 'Últimos 3 meses';
+      break;
+    case 'CURRENT_YEAR':
+      from.setMonth(0);
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      label = `Ano ${now.getFullYear()}`;
+      break;
+    case 'CUSTOM': {
+      const f = custom.from ? new Date(custom.from) : new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const t = custom.to ? new Date(custom.to) : now;
+      f.setHours(0, 0, 0, 0);
+      t.setHours(23, 59, 59, 999);
+      label = `${f.toLocaleDateString('pt-BR')} – ${t.toLocaleDateString('pt-BR')}`;
+      return { from: f, to: t, label };
+    }
+  }
+  to.setHours(23, 59, 59, 999);
+  return { from, to, label };
+}
+
+function parseOutorgaDate(raw: string | undefined | null): Date | null {
+  if (!raw) return null;
+  let iso = String(raw).trim();
+  if (!iso) return null;
+  if (iso.includes('/')) {
+    const parts = iso.split('/');
+    if (parts.length === 3 && parts[2].length === 4) {
+      iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+interface PeriodSelectorProps {
+  preset: PeriodPreset;
+  onPresetChange: (p: PeriodPreset) => void;
+  custom: { from: string; to: string };
+  onCustomChange: (c: { from: string; to: string }) => void;
+  isDark: boolean;
+}
+
+function PeriodSelector({ preset, onPresetChange, custom, onCustomChange, isDark }: PeriodSelectorProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5">
+        {PERIOD_PRESETS.map(p => {
+          const active = preset === p.key;
+          return (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => onPresetChange(p.key)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all duration-200 cursor-pointer ${active
+                  ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30'
+                  : isDark
+                    ? 'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80 border border-white/5'
+                    : 'bg-white/70 text-slate-600 hover:bg-white border border-slate-200/60'
+                }`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      {preset === 'CUSTOM' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="date"
+            value={custom.from}
+            onChange={e => onCustomChange({ ...custom, from: e.target.value })}
+            className={`text-[11px] px-2 py-1 rounded-md border ${isDark ? 'bg-zinc-800/60 border-white/10 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'}`}
+          />
+          <span className="text-[10px] text-zinc-400 font-mono">até</span>
+          <input
+            type="date"
+            value={custom.to}
+            onChange={e => onCustomChange({ ...custom, to: e.target.value })}
+            className={`text-[11px] px-2 py-1 rounded-md border ${isDark ? 'bg-zinc-800/60 border-white/10 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'}`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface DashboardViewProps {
   people: Person[];
@@ -16,10 +143,10 @@ interface DashboardViewProps {
   currentUserSectors?: string[];
 }
 
-export default function DashboardView({ 
-  people: rawPeople, 
-  families: rawFamilies, 
-  onNavigate, 
+export default function DashboardView({
+  people: rawPeople,
+  families: rawFamilies,
+  onNavigate,
   isDark,
   currentUserRole,
   currentUserSectors
@@ -36,7 +163,7 @@ export default function DashboardView({
   const families = React.useMemo(() => {
     if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
       const sectorsUpper = currentUserSectors.map(s => s.toUpperCase());
-      return rawFamilies.filter(f => 
+      return rawFamilies.filter(f =>
         rawPeople.some(p => p.idFamilia === f.id && sectorsUpper.includes((p.setor2 || '').toUpperCase()))
       );
     }
@@ -56,6 +183,26 @@ export default function DashboardView({
     const firstAttend = p.jornadaDatas['Primeiro atendimento'];
     return firstAttend && firstAttend.startsWith('2026-06');
   }).length;
+
+  // ── Period selector (shared by outorgas + novos) ─────────────────────────
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('CURRENT_MONTH');
+  const [periodCustom, setPeriodCustom] = useState<{ from: string; to: string }>({ from: '', to: '' });
+
+  const currentRange = useMemo(
+    () => periodToRange(periodPreset, periodCustom),
+    [periodPreset, periodCustom]
+  );
+
+  // Novos no período selecionado (substitui o hardcoded 2026-06)
+  const novosNoPeriodo = useMemo(() => {
+    return people.filter(p => {
+      const firstAttend = p.jornadaDatas['Primeiro atendimento'];
+      if (!firstAttend) return false;
+      const d = new Date(firstAttend);
+      if (isNaN(d.getTime())) return false;
+      return d >= currentRange.from && d <= currentRange.to;
+    }).length;
+  }, [people, currentRange]);
 
   // Conclusão de Pós-Outorga
   const concluiuPos = people.filter(p => {
@@ -157,7 +304,7 @@ export default function DashboardView({
       if (iso.includes('/')) {
         const parts = iso.split('/');
         if (parts.length === 3 && parts[2].length === 4) {
-          iso = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+          iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         }
       }
       const monthKey = iso.substring(0, 7); // YYYY-MM
@@ -171,8 +318,8 @@ export default function DashboardView({
       .slice(-24)
       .map(([month, count]) => {
         const [year, m] = month.split('-');
-        const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-        return { key: month, label: `${monthNames[parseInt(m)-1]}/${year.slice(2)}`, count };
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        return { key: month, label: `${monthNames[parseInt(m) - 1]}/${year.slice(2)}`, count };
       });
   }, [people]);
 
@@ -205,18 +352,18 @@ export default function DashboardView({
         if (iso.includes('/')) {
           const parts = iso.split('/');
           if (parts.length === 3 && parts[2].length === 4)
-            iso = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+            iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         }
         const monthKey = iso.substring(0, 7);
         if (/^\d{4}-\d{2}$/.test(monthKey)) map[monthKey] = (map[monthKey] || 0) + 1;
       });
-    const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-24)
       .map(([month, count]) => {
         const [year, m] = month.split('-');
-        return { key: month, label: `${monthNames[parseInt(m)-1]}/${year.slice(2)}`, count };
+        return { key: month, label: `${monthNames[parseInt(m) - 1]}/${year.slice(2)}`, count };
       });
   }, [people, outorgaSectorFilter, outorgasByMonth]);
 
