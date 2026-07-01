@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Person, Family } from '../types';
 import { Home, Plus, MapPin, Users, Heart, Award, Search, ArrowUpDown } from 'lucide-react';
 import FamilyGoogleMap from './FamilyGoogleMap';
@@ -35,6 +35,18 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
   const [selectedNeighborhood, setSelectedNeighborhood] = useState('Todos');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
+  const effectiveSectorFilterValues = useMemo(() => {
+    if (currentUserRole === 'AM' && currentUserSectors && currentUserSectors.length > 0) {
+      return currentUserSectors.map(s => s.trim().toUpperCase()).filter(Boolean);
+    }
+
+    if (selectedSector !== 'Todos') {
+      return [selectedSector.trim().toUpperCase()];
+    }
+
+    return [];
+  }, [currentUserRole, currentUserSectors, selectedSector]);
+
   // Find all unique sectors and neighborhoods for families
   const familySectorsMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -50,11 +62,39 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
     const map: Record<string, string[]> = {};
     families.forEach(f => {
       const familyMembers = people.filter(p => p.idFamilia === f.id);
-      const neighborhoods = Array.from(new Set(familyMembers.map(m => m.bairroAjustado?.trim().toUpperCase()).filter(Boolean)));
+      const relevantMembers = effectiveSectorFilterValues.length > 0
+        ? familyMembers.filter(m => {
+            const memberSector = m.setor2?.trim().toUpperCase();
+            return memberSector ? effectiveSectorFilterValues.includes(memberSector) : false;
+          })
+        : familyMembers;
+
+      const neighborhoods = Array.from(new Set(relevantMembers.map(m => m.bairroAjustado?.trim().toUpperCase()).filter(Boolean)));
       map[f.id] = neighborhoods.length > 0 ? neighborhoods : ['SEM BAIRRO'];
     });
     return map;
-  }, [families, people]);
+  }, [families, people, effectiveSectorFilterValues]);
+
+  const neighborhoodOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    Object.values(familyNeighborhoodsMap).forEach(neighborhoods => {
+      neighborhoods.forEach(neighbor => {
+        if (!neighbor || neighbor === 'SEM BAIRRO') return;
+        counts[neighbor] = (counts[neighbor] || 0) + 1;
+      });
+    });
+
+    return Object.entries(counts)
+      .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+      .map(([name, count]) => ({ name, count }));
+  }, [familyNeighborhoodsMap]);
+
+  useEffect(() => {
+    if (selectedNeighborhood !== 'Todos' && !neighborhoodOptions.some(option => option.name === selectedNeighborhood)) {
+      setSelectedNeighborhood('Todos');
+    }
+  }, [selectedNeighborhood, neighborhoodOptions]);
 
   // List of all unique sectors for the clickable filter
   const allSectors = useMemo(() => {
@@ -65,10 +105,8 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
 
   // List of all unique neighborhoods (sorted A-Z) for the dropdown filter
   const allNeighborhoods = useMemo(() => {
-    const neighborhoodsSet = new Set<string>();
-    (Object.values(familyNeighborhoodsMap) as string[][]).forEach(neighs => neighs.forEach(n => neighborhoodsSet.add(n)));
-    return Array.from(neighborhoodsSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [familyNeighborhoodsMap]);
+    return neighborhoodOptions.map(option => option.name);
+  }, [neighborhoodOptions]);
 
   // Filter and sort families
   const filteredAndSortedFamilies = useMemo(() => {
@@ -269,11 +307,14 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
               }`}
             >
               <option value="Todos">TODOS OS BAIRROS ({allNeighborhoods.length})</option>
-              {allNeighborhoods.map(neigh => (
-                <option key={neigh} value={neigh}>
-                  {neigh}
-                </option>
-              ))}
+              {allNeighborhoods.map(neigh => {
+                const option = neighborhoodOptions.find(item => item.name === neigh);
+                return (
+                  <option key={neigh} value={neigh}>
+                    {neigh} ({option?.count ?? 0}.F)
+                  </option>
+                );
+              })}
             </select>
           </div>
 
