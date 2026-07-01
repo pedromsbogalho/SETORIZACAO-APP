@@ -12,7 +12,7 @@ const AVAILABLE_SECTORS = [
   'SUL',
   'ILHA BELA',
   'SÃO SEBASTIÃO',
-  'INDAIÁ-SERRA',
+  'INDAIÁ SERRA',
   'LESTE',
   'OHIKARI',
   'OUTROS',

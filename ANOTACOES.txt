@@ -8,6 +8,7 @@ INFO SOBRE COMO FUNCIONA A GRAVAÇÃO NO FIRESTONE:
 
 Essa é uma excelente pergunta! Para o seu aplicativo de controle de membros (que lida com importação de planilhas, controle de presença, histórico de cursos e logs de auditoria), esses limites do plano gratuito do Firebase (Spark) são bastante generosos para o uso cotidiano, mas existem alguns pontos de atenção que você deve conhecer.
 Aqui está o que esses limites significam, na prática, dentro do seu sistema:
+
 1. Leituras (50.000 por dia) — As consultas de dados
 Cada vez que o aplicativo busca informações no banco de dados para mostrar na tela, isso conta como uma "leitura" por documento (cada pessoa, usuário ou log é um documento).
 Na prática: Se você tem 500 membros cadastrados no banco de dados:
