@@ -1346,6 +1346,7 @@ export default function App() {
                 people={people}
                 onUpdatePeople={handleUpdatePeople}
                 isDark={isDark}
+                currentUserName={currentAppUser?.displayName || currentUser?.displayName || currentAppUser?.email || currentUser?.email || ''}
               />
             )}
 

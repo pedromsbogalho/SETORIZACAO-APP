@@ -4,23 +4,27 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Person } from '../types';
+import { Person, ComentarioJornada } from '../types';
 import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle, Clock, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface CoursesViewProps {
   people: Person[];
   onUpdatePeople: (newPeople: Person[]) => void;
   isDark: boolean;
+  currentUserName?: string;
 }
 
-export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesViewProps) {
+export default function CoursesView({ people, onUpdatePeople, isDark, currentUserName }: CoursesViewProps) {
   const [activeTab, setActiveTab] = useState<'iniciacao' | 'pos-outorga'>('iniciacao');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [memberTimeFilter, setMemberTimeFilter] = useState<'all' | 'recent' | '1-3' | '3plus' | 'none'>('all');
   const [selectedPosOutorgaSectors, setSelectedPosOutorgaSectors] = useState<string[]>([]);
+  const [selectedInstructorFilter, setSelectedInstructorFilter] = useState('ALL');
   const [posOutorgaSortField, setPosOutorgaSortField] = useState<'nome' | 'progresso' | 'dataOutorga'>('nome');
   const [posOutorgaSortOrder, setPosOutorgaSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [observacoesModalPersonId, setObservacoesModalPersonId] = useState<string | null>(null);
+  const [newObservacaoText, setNewObservacaoText] = useState('');
 
   // Pagination states
   const [rowsLimit, setRowsLimit] = useState<number>(10);
@@ -29,7 +33,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
   // Reset pageIndex when any filter or tab changes
   useEffect(() => {
     setPageIndex(0);
-  }, [searchQuery, selectedSector, activeTab, memberTimeFilter, selectedPosOutorgaSectors]);
+  }, [searchQuery, selectedSector, activeTab, memberTimeFilter, selectedPosOutorgaSectors, selectedInstructorFilter]);
 
   // Extract unique sectors list
   const sectorsList = Array.from(new Set(people.map(p => p.setor2 || 'SEM SETOR').filter(Boolean)));
@@ -67,7 +71,71 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
         const nextAulas = { ...p.cursoPosOutorga.aulas, [lessonNumber]: nextStatus };
         return {
           ...p,
-          cursoPosOutorga: { aulas: nextAulas }
+          cursoPosOutorga: { ...p.cursoPosOutorga, aulas: nextAulas }
+        };
+      }
+      return p;
+    });
+    onUpdatePeople(updated);
+  };
+
+  const handlePosOutorgaInstructorChange = (id: string, lessonNumber: 1 | 2 | 3 | 4 | 5, value: string) => {
+    const updated = people.map(p => {
+      if (p.id === id) {
+        const nextInstrutores = {
+          ...(p.cursoPosOutorga.instrutores || {}),
+          [lessonNumber]: value
+        };
+        return {
+          ...p,
+          cursoPosOutorga: {
+            ...p.cursoPosOutorga,
+            instrutores: nextInstrutores
+          }
+        };
+      }
+      return p;
+    });
+    onUpdatePeople(updated);
+  };
+
+  const handleAddObservacao = (personId: string, texto: string) => {
+    if (!texto.trim()) return;
+    const novoComentario: ComentarioJornada = {
+      id: `${personId}-${Date.now()}`,
+      texto: texto.trim(),
+      autorNome: currentUserName || 'Usuário',
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = people.map(p => {
+      if (p.id === personId) {
+        const currentComments = p.cursoPosOutorga.observacoesComentarios || [];
+        return {
+          ...p,
+          cursoPosOutorga: {
+            ...p.cursoPosOutorga,
+            observacoesComentarios: [...currentComments, novoComentario]
+          }
+        };
+      }
+      return p;
+    });
+
+    onUpdatePeople(updated);
+    setNewObservacaoText('');
+  };
+
+  const handleDeleteObservacao = (personId: string, comentarioId: string) => {
+    const updated = people.map(p => {
+      if (p.id === personId) {
+        const currentComments = p.cursoPosOutorga.observacoesComentarios || [];
+        return {
+          ...p,
+          cursoPosOutorga: {
+            ...p.cursoPosOutorga,
+            observacoesComentarios: currentComments.filter(c => c.id !== comentarioId)
+          }
         };
       }
       return p;
@@ -104,6 +172,30 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
     return list;
   }, [filteredPeople, memberTimeFilter, selectedPosOutorgaSectors]);
 
+  const instructorCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    posOutorgaFiltered.forEach(p => {
+      const instrutores = p.cursoPosOutorga.instrutores || {};
+      ([1, 2, 3, 4, 5] as const).forEach(num => {
+        const name = instrutores[num]?.trim();
+        if (name) {
+          counts[name] = (counts[name] || 0) + 1;
+        }
+      });
+    });
+    return counts;
+  }, [posOutorgaFiltered]);
+
+  const posOutorgaFinalFiltered = useMemo(() => {
+    if (selectedInstructorFilter === 'ALL') {
+      return posOutorgaFiltered;
+    }
+    return posOutorgaFiltered.filter(p => {
+      const instrutores = p.cursoPosOutorga.instrutores || {};
+      return ([1, 2, 3, 4, 5] as const).some(num => instrutores[num]?.trim() === selectedInstructorFilter);
+    });
+  }, [posOutorgaFiltered, selectedInstructorFilter]);
+
   const posOutorgaStats = useMemo(() => {
     const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; inProgress: number; notStarted: number }> = {
       1: { completed: 0, inProgress: 0, notStarted: 0 },
@@ -115,7 +207,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
 
     const sectors: Record<string, number> = {};
 
-    posOutorgaFiltered.forEach(m => {
+    posOutorgaFinalFiltered.forEach(m => {
       const aulas = m.cursoPosOutorga?.aulas || {};
       const sector = m.setor2 || 'SEM SETOR';
 
@@ -140,10 +232,10 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
     });
 
     return { lessons, sectors };
-  }, [posOutorgaFiltered]);
+  }, [posOutorgaFinalFiltered]);
 
   const sortedPosOutorgaFiltered = useMemo(() => {
-    const list = [...posOutorgaFiltered];
+    const list = [...posOutorgaFinalFiltered];
     return list.sort((a, b) => {
       if (posOutorgaSortField === 'nome') {
         const comparison = a.nome.localeCompare(b.nome, 'pt-BR');
@@ -181,7 +273,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
         return a.nome.localeCompare(b.nome, 'pt-BR');
       }
     });
-  }, [posOutorgaFiltered, posOutorgaSortField, posOutorgaSortOrder]);
+  }, [posOutorgaFinalFiltered, posOutorgaSortField, posOutorgaSortOrder]);
 
   const handlePosOutorgaSort = (field: 'nome' | 'progresso' | 'dataOutorga') => {
     if (posOutorgaSortField === field) {
@@ -453,6 +545,35 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
 
           {/* Lessons Cards */}
           <div className="space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Instrutores & Aulas</h4>
+              {selectedInstructorFilter !== 'ALL' && (
+                <button
+                  onClick={() => setSelectedInstructorFilter('ALL')}
+                  className="text-[10px] text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 font-semibold underline underline-offset-2"
+                >
+                  Limpar filtro de instrutor
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {Object.entries(instructorCounts).length === 0 ? (
+                <span className="text-[10px] text-zinc-400 italic">Nenhum instrutor registrado ainda.</span>
+              ) : (
+                Object.entries(instructorCounts).map(([instrutor, count]) => {
+                  const isSelected = selectedInstructorFilter === instrutor;
+                  return (
+                    <button
+                      key={instrutor}
+                      onClick={() => setSelectedInstructorFilter(instrutor)}
+                      className={`px-3 py-1.5 rounded-lg border text-[10px] uppercase transition-all duration-200 ${isSelected ? 'bg-teal-600 text-white border-teal-600' : 'bg-white/70 dark:bg-zinc-950/30 border-slate-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900'}`}
+                    >
+                      {instrutor}: {count} aula{count === 1 ? '' : 's'}
+                    </button>
+                  );
+                })
+              )}
+            </div>
             <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Pessoas por Aula</h4>
             <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
               {([1, 2, 3, 4, 5] as const).map(lessonNum => {
@@ -576,6 +697,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                   <th className="py-2.5 px-3 text-center">Aula 3</th>
                   <th className="py-2.5 px-3 text-center">Aula 4</th>
                   <th className="py-2.5 px-3 text-center">Aula 5</th>
+                  <th className="py-2.5 px-3 text-center">Observações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
@@ -625,6 +747,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                             {/* Lesson buttons */}
                             {([1, 2, 3, 4, 5] as const).map(lessonNum => {
                               const lessonStatus = aulas[lessonNum] || 'Não iniciou';
+                              const instructorValue = p.cursoPosOutorga.instrutores?.[lessonNum] || '';
                               let btnStyle = 'bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 border border-zinc-200 dark:border-zinc-700';
                               if (lessonStatus === 'Concluido' || lessonStatus === 'Concluído') {
                                  btnStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs';
@@ -633,17 +756,35 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                               }
 
                               return (
-                                <td key={lessonNum} className="py-3 px-1 text-center">
+                                <td key={lessonNum} className="py-2 px-1 text-center align-top">
                                   <button 
                                     id={`btn-toggle-lesson-${p.id}-${lessonNum}`}
                                     onClick={() => handlePosOutorgaLessonToggle(p.id, lessonNum)}
-                                    className={`px-3 py-1 text-[10px] rounded transition-colors cursor-pointer w-22 font-semibold ${btnStyle}`}
+                                    className={`w-full px-3 py-1 text-[10px] rounded transition-colors cursor-pointer font-semibold ${btnStyle}`}
                                   >
                                     {lessonStatus}
                                   </button>
+                                  <input
+                                    type="text"
+                                    value={instructorValue}
+                                    onChange={(e) => handlePosOutorgaInstructorChange(p.id, lessonNum, e.target.value)}
+                                    placeholder="Instrutor"
+                                    className={`mt-2 w-full rounded-md border px-2 py-1 text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-zinc-700'} focus:outline-none`}
+                                  />
                                 </td>
                               );
                             })}
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                onClick={() => {
+                                  setObservacoesModalPersonId(p.id);
+                                  setNewObservacaoText('');
+                                }}
+                                className="px-3 py-2 text-[11px] rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                              >
+                                Observações ({(p.cursoPosOutorga.observacoesComentarios || []).length})
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -687,6 +828,87 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {observacoesModalPersonId && (() => {
+            const modalPerson = people.find(p => p.id === observacoesModalPersonId);
+            const comments = modalPerson?.cursoPosOutorga.observacoesComentarios || [];
+            if (!modalPerson) return null;
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+                <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200/40 bg-white text-slate-900 shadow-2xl dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-200/40 px-5 py-4 dark:border-white/10">
+                    <div>
+                      <h3 className="text-sm font-semibold">Observações de {modalPerson.nome}</h3>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Comentários por aula, capa de estilo Trello e histórico rápido.</p>
+                    </div>
+                    <button
+                      onClick={() => setObservacoesModalPersonId(null)}
+                      className="text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white"
+                    >Fechar</button>
+                  </div>
+
+                  <div className="space-y-4 p-5">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200/40 bg-slate-50 p-3 dark:border-white/10 dark:bg-zinc-900/60">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Total</p>
+                        <p className="mt-3 text-2xl font-semibold">{comments.length}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200/40 bg-slate-50 p-3 dark:border-white/10 dark:bg-zinc-900/60">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Membro</p>
+                        <p className="mt-3 text-sm font-semibold">{modalPerson.nome}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200/40 bg-slate-50 p-3 dark:border-white/10 dark:bg-zinc-900/60">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Setor</p>
+                        <p className="mt-3 text-sm font-semibold">{modalPerson.setor2 || 'Sem Setor'}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-200/40 bg-slate-50 p-4 dark:border-white/10 dark:bg-zinc-900/70">
+                      <h4 className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">Novo comentário</h4>
+                      <textarea
+                        value={newObservacaoText}
+                        onChange={(e) => setNewObservacaoText(e.target.value)}
+                        rows={4}
+                        placeholder="Escreva uma observação sobre o membro..."
+                        className="mt-3 w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none transition-colors focus:border-teal-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+                      />
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Autor: {currentUserName || 'Usuário'}</span>
+                        <button
+                          onClick={() => handleAddObservacao(modalPerson.id, newObservacaoText)}
+                          className="rounded-full bg-teal-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-teal-700 transition-colors"
+                        >Adicionar</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {comments.length === 0 ? (
+                        <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-400">
+                          Nenhum comentário registrado ainda.
+                        </div>
+                      ) : (
+                        comments.map(comment => (
+                          <div key={comment.id} className="rounded-3xl border border-slate-200/40 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-900 dark:text-zinc-100">{comment.autorNome}</p>
+                                <p className="text-[10px] text-zinc-500 dark:text-zinc-400">{new Date(comment.createdAt).toLocaleString('pt-BR')}</p>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteObservacao(modalPerson.id, comment.id)}
+                                className="text-[10px] text-red-500 hover:text-red-600"
+                              >Excluir</button>
+                            </div>
+                            <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             );

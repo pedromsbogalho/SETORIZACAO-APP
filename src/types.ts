@@ -33,6 +33,14 @@ export interface CursoPosOutorga {
     4: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
     5: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
   };
+  instrutores?: {
+    1?: string;
+    2?: string;
+    3?: string;
+    4?: string;
+    5?: string;
+  };
+  observacoesComentarios?: ComentarioJornada[];
 }
 
 export interface GrupoWhatsApp {
