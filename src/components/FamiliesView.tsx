@@ -158,7 +158,7 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
         <div>
           <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Gestão de Famílias</h2>
           <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-            Mapeamento residencial de assistência, contagem de membresia familiar e relatórios de acompanhamento pastoral nos lares.
+            Mapeamento residencial, contagem de membros por familias/setor.
           </p>
         </div>
         <button 

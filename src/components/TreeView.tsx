@@ -78,9 +78,9 @@ export default function TreeView({ people, families, structure, isDark, currentU
     <div className="space-y-6">
       {/* Title */}
       <div>
-        <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Setorização e Distribuição Territorial</h2>
+        <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Setores externos</h2>
         <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-          Navegue pelas divisões pastorais do Johrei Center. Visualize os líderes responsáveis e a estrutura familiar em cada setor.
+          Navegue pelos setores e pela estrutura familiar em cada setor.
         </p>
       </div>
 

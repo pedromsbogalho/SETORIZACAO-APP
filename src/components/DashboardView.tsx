@@ -835,7 +835,7 @@ export default function DashboardView({
           <div className="flex justify-between items-center pb-2 border-b border-slate-200/40 dark:border-white/5">
             <h4 className="font-sans font-semibold text-sm flex items-center gap-2 text-slate-800 dark:text-zinc-200">
               <Award className="w-4 h-4 text-emerald-500" />
-              Etapas de Desenvolvimento Espiritual
+              Etapas da Jornada Espiritual
             </h4>
             <button
               id="btn-goto-journey"

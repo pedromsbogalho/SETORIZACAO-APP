@@ -248,7 +248,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
       <div>
         <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Jornada Espiritual e Linha do Tempo</h2>
         <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-          Acompanhe e administre o progresso e conquistas de cada pessoa, desde o primeiro Johrei recebido até a outorga ministerial.
+          Acompanhe e administre o progresso e conquistas de cada pessoa, desde o primeiro Johrei recebido até a outorga.
         </p>
       </div>
 
@@ -302,7 +302,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
 
             {/* Sector filter */}
             <div>
-              <label className="block text-[9px] font-mono uppercase text-zinc-400 mb-1">Setor (SETOR2)</label>
+              <label className="block text-[9px] font-mono uppercase text-zinc-400 mb-1">Setor</label>
               <select
                 id="journey-sector-filter"
                 value={sectorFilter}
@@ -519,7 +519,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   <div>
                     <h4 className="font-bold text-teal-950 dark:text-teal-300">Acompanhamento Contínuo de Fé e Dedicação (Membro)</h4>
                     <p className="text-slate-500 dark:text-zinc-400 mt-0.5 text-xxs leading-relaxed">
-                      Painel para acompanhar de forma personalizada o aprimoramento espiritual, as práticas de difusão, cursos de teologia e dedicações do membro do Johrei Center.
+                      Painel para acompanhar de forma personalizada o aprimoramento espiritual, as práticas de fé e dedicações do membro do Johrei Center.
                     </p>
                   </div>
                 </div>
@@ -531,7 +531,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   <div className="p-4 rounded-xl border border-slate-200/60 dark:border-white/5 bg-slate-50/30 dark:bg-zinc-950/20 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200/40 dark:border-white/5 pb-2">
                       <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Dedicações de Fé</h4>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Dedicação monetária</h4>
                     </div>
 
                     {/* Donativo */}
@@ -623,14 +623,14 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   <div className="p-4 rounded-xl border border-slate-200/60 dark:border-white/5 bg-slate-50/30 dark:bg-zinc-950/20 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200/40 dark:border-white/5 pb-2">
                       <BookOpen className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Cursos e Vivência Cultural</h4>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Cursos realizados</h4>
                     </div>
 
                     {/* Ikebana */}
                     <div className="space-y-2">
                       <label className="text-[10px] font-mono uppercase text-zinc-400 flex items-center gap-1.5">
                         <Sprout className="w-3 h-3 text-emerald-500" />
-                        Arte da Ikebana Sanguetsu
+                        Curso de Ikebana Sanguetsu
                       </label>
                       <select
                         value={getJornadaMembro(selectedPerson).ikebanaStatus}
@@ -641,14 +641,15 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                         <option value="Fez curso básico">Fez curso básico</option>
                         <option value="Fez curso intermediário">Fez curso intermediário</option>
                         <option value="Fez curso avançado">Fez curso avançado</option>
-                        <option value="Ministra/Instrutor">Ministra / Instrutor de Sanguetsu</option>
+                        <option value="Ministra/Instrutor">Fez curso de monitor</option>
+                        <option value="Ministra/Instrutor">Professor(a)  de Ikebana</option>
                       </select>
                     </div>
 
                     {/* Cursos de Nível */}
                     <div className="space-y-2.5">
                       <label className="text-[10px] font-mono uppercase text-zinc-400">
-                        Cursos de Nível da Igreja
+                        Cursos de Nível 
                       </label>
                       <div className="space-y-2">
                         {[1, 2, 3, 4].map(num => {
@@ -684,7 +685,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                     {/* Jovem 3 */}
                     <div className="space-y-2">
                       <label className="text-[10px] font-mono uppercase text-zinc-400">
-                        Formação Jovem 3
+                        Formação Johvem 3
                       </label>
                       <div className="grid grid-cols-4 gap-1">
                         {(['Sim', 'Não', 'Em andamento', 'Não se aplica'] as const).map(option => {
@@ -714,14 +715,14 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 border-b border-slate-200/40 dark:border-white/5 pb-2">
                           <AlertCircle className="w-4 h-4 text-amber-500" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Purificações / Desafios Atuais</h4>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Purificações</h4>
                         </div>
-                        <p className="text-[10px] text-zinc-400">Selecione as áreas que o membro está purificando ou focando em aprimoramento no momento:</p>
+                        <p className="text-[10px] text-zinc-400">Selecione as áreas que o membro está purificando no momento:</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
                             { key: 'saude', label: '🏥 Saúde' },
                             { key: 'conflito', label: '🤝 Conflito' },
-                            { key: 'financeiro', label: '💰 Financeira' },
+                            { key: 'financeiro', label: '💰 Financeiro' },
                             { key: 'outros', label: '🌀 Outros' }
                           ].map(({ key, label }) => {
                             const pState = getJornadaMembro(selectedPerson).purificacoes;
@@ -746,7 +747,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                         </div>
                         <div className="space-y-3 mt-4">
                           <div className="flex items-center justify-between gap-2">
-                            <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários de Purificação</label>
+                            <label className="text-[9px] font-mono uppercase text-zinc-400">Comentários acerca da purificação</label>
                             <span className="text-[10px] text-zinc-400">{getJornadaMembro(selectedPerson).purificacoes.comentarios.length} comentário(s)</span>
                           </div>
                           <div className="space-y-2">
@@ -805,7 +806,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 border-b border-slate-200/40 dark:border-white/5 pb-2">
                           <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Orientações Ministeriais</h4>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">Orientações/tarefas</h4>
                         </div>
                         <div className="space-y-3">
                           <div className="flex items-center justify-between gap-2">
@@ -863,7 +864,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                           )}
 
                           <div>
-                            <label className="text-[9px] font-mono uppercase text-zinc-400 block mb-1">Cumprindo as orientações de fé?</label>
+                            <label className="text-[9px] font-mono uppercase text-zinc-400 block mb-1">Cumprindo as orientações?</label>
                             <div className="grid grid-cols-4 gap-1">
                               {(['Sim', 'Parcialmente', 'Não', 'Não se aplica'] as const).map(option => {
                                 const isSelected = getJornadaMembro(selectedPerson).orientacoes.cumprindo === option;

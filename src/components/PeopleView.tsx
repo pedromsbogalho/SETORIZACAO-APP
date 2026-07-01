@@ -553,9 +553,9 @@ export default function PeopleView({
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Membros (Ohikari)</h2>
+          <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Messiânicos </h2>
           <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-            Gerenciamento geral de membros messiânicos outorgados, histórico espiritual e situação cadastral.
+            Gerenciamento geral de messiânicos da unidade.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">

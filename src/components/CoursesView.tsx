@@ -34,47 +34,6 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
   // Extract unique sectors list
   const sectorsList = Array.from(new Set(people.map(p => p.setor2 || 'SEM SETOR').filter(Boolean)));
 
-  // Memoized stats for Curso Pós-Outorga
-  const posOutorgaStats = useMemo(() => {
-    const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; inProgress: number; notStarted: number }> = {
-      1: { completed: 0, inProgress: 0, notStarted: 0 },
-      2: { completed: 0, inProgress: 0, notStarted: 0 },
-      3: { completed: 0, inProgress: 0, notStarted: 0 },
-      4: { completed: 0, inProgress: 0, notStarted: 0 },
-      5: { completed: 0, inProgress: 0, notStarted: 0 },
-    };
-
-    const sectors: Record<string, number> = {};
-
-    const members = people.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari');
-
-    members.forEach(m => {
-      const aulas = m.cursoPosOutorga?.aulas || {};
-      const sector = m.setor2 || 'SEM SETOR';
-
-      let hasParticipated = false;
-
-      ([1, 2, 3, 4, 5] as const).forEach(num => {
-        const status = aulas[num] || 'Não iniciou';
-        if (status === 'Concluido' || status === 'Concluído') {
-          lessons[num].completed++;
-          hasParticipated = true;
-        } else if (status === 'Em andamento') {
-          lessons[num].inProgress++;
-          hasParticipated = true;
-        } else {
-          lessons[num].notStarted++;
-        }
-      });
-
-      if (hasParticipated) {
-        sectors[sector] = (sectors[sector] || 0) + 1;
-      }
-    });
-
-    return { lessons, sectors };
-  }, [people]);
-
   // Course handlers
   const handleIniciacaoChange = (id: string, field: string, value: any) => {
     const updated = people.map(p => {
@@ -145,6 +104,44 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
     return list;
   }, [filteredPeople, memberTimeFilter, selectedPosOutorgaSectors]);
 
+  const posOutorgaStats = useMemo(() => {
+    const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; inProgress: number; notStarted: number }> = {
+      1: { completed: 0, inProgress: 0, notStarted: 0 },
+      2: { completed: 0, inProgress: 0, notStarted: 0 },
+      3: { completed: 0, inProgress: 0, notStarted: 0 },
+      4: { completed: 0, inProgress: 0, notStarted: 0 },
+      5: { completed: 0, inProgress: 0, notStarted: 0 },
+    };
+
+    const sectors: Record<string, number> = {};
+
+    posOutorgaFiltered.forEach(m => {
+      const aulas = m.cursoPosOutorga?.aulas || {};
+      const sector = m.setor2 || 'SEM SETOR';
+
+      let hasParticipated = false;
+
+      ([1, 2, 3, 4, 5] as const).forEach(num => {
+        const status = aulas[num] || 'Não iniciou';
+        if (status === 'Concluido' || status === 'Concluído') {
+          lessons[num].completed++;
+          hasParticipated = true;
+        } else if (status === 'Em andamento') {
+          lessons[num].inProgress++;
+          hasParticipated = true;
+        } else {
+          lessons[num].notStarted++;
+        }
+      });
+
+      if (hasParticipated) {
+        sectors[sector] = (sectors[sector] || 0) + 1;
+      }
+    });
+
+    return { lessons, sectors };
+  }, [posOutorgaFiltered]);
+
   const sortedPosOutorgaFiltered = useMemo(() => {
     const list = [...posOutorgaFiltered];
     return list.sort((a, b) => {
@@ -200,10 +197,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Controle de Cursos e Formação Teológica</h2>
+          <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Controle de Cursos / Princípios e pós-outorga</h2>
           <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-            Acompanhe o preenchimento de requisitos espirituais fundamentais da Igreja Messiânica Mundial.
-          </p>
+            Acompanhe o progresso dos membros nos cursos de Iniciação e Pós-Outorga.p</p>
         </div>
 
         {/* Tab switchers */}
@@ -217,7 +213,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                 : 'text-zinc-500 hover:text-teal-500'
             }`}
           >
-            Curso de Iniciação
+            Principios
           </button>
           <button 
             id="tab-pos-outorga"
@@ -228,7 +224,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
                 : 'text-zinc-500 hover:text-teal-500'
             }`}
           >
-            Curso Pós-Outorga (5 Aulas)
+            Pós-Outorga
           </button>
         </div>
       </div>
@@ -289,7 +285,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
           <div className="p-6 rounded-xl glass-panel shadow-sm space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-200/40 dark:border-white/5">
               <BookOpen className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-              <h3 className="text-sm font-sans font-bold">Participantes e Conclusão do Curso de Iniciação</h3>
+              <h3 className="text-sm font-sans font-bold">Pricípios messiânicos</h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -419,7 +415,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark }: CoursesV
           <div className="flex items-center justify-between pb-2 border-b border-slate-200/40 dark:border-white/5">
             <div className="flex items-center gap-2">
               <Award className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-              <h3 className="text-sm font-sans font-bold">Acompanhamento das 5 Aulas Teológicas do Curso Pós-Outorga</h3>
+              <h3 className="text-sm font-sans font-bold">Acompanhamento das 5 de Pós-Outorga</h3>
             </div>
           </div>
 
