@@ -854,6 +854,42 @@ export default function FrequentersView({
 
 
                 <div>
+                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Celular Principal (WhatsApp)</label>
+                  <input 
+                    type="text"
+                    placeholder="EX: 12997367868"
+                    value={formCelular}
+                    onChange={(e) => setFormCelular(e.target.value)}
+                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Endereço de Residência</label>
+                  <input 
+                    type="text"
+                    placeholder="EX: RUA DAS PALMEIRAS, 120"
+                    value={formEndCompleto}
+                    onChange={(e) => setFormEndCompleto(e.target.value)}
+                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Bairro Ajustado</label>
+                  <input 
+                    type="text"
+                    placeholder="EX: JARDIM AMÉRICA"
+                    value={formBairro}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFormBairro(v);
+                    }}
+                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
+                  />
+                </div>
+
+                <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Assistente de Ministro (AM)</label>
                   <select 
                     value={formAM}
@@ -876,44 +912,6 @@ export default function FrequentersView({
                     className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700 disabled:opacity-60' : 'bg-white border-zinc-200 disabled:opacity-60'} focus:outline-none`}
                   />
                 </div>
-
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Celular Principal (WhatsApp)</label>
-                  <input 
-                    type="text"
-                    placeholder="EX: 12997367868"
-                    value={formCelular}
-                    onChange={(e) => setFormCelular(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  />
-                </div>
-
-
-
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Endereço de Residência</label>
-                  <input 
-                    type="text"
-                    placeholder="EX: RUA DAS PALMEIRAS, 120"
-                    value={formEndCompleto}
-                    onChange={(e) => setFormEndCompleto(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Bairro Ajustado</label>
-                  <input 
-                    type="text"
-                    placeholder="EX: JARDIM AMÉRICA"
-                    value={formBairro}
-                    onChange={(e) => setFormBairro(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  />
-                </div>
-
-
-
 
               </div>
 
