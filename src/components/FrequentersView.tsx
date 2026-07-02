@@ -145,7 +145,6 @@ export default function FrequentersView({
       setFormAM(structure.amList[0].name);
       setFormSetor(structure.amList[0].sector);
     }
-    // Default to first AF if available
 
     setIsModalOpen(true);
   };
@@ -822,17 +821,6 @@ export default function FrequentersView({
             <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Código Cadastro</label>
-                  <input 
-                    type="text"
-                    value={formId}
-                    onChange={(e) => setFormId(e.target.value)}
-                    disabled={!!selectedPerson}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700 disabled:opacity-50' : 'bg-white border-zinc-200 disabled:opacity-50'} focus:outline-none`}
-                  />
-                </div>
-
-                <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Nome Completo</label>
                   <input 
                     type="text"
@@ -842,6 +830,7 @@ export default function FrequentersView({
                     className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
                   />
                 </div>
+
 
                 <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Tipo de Frequentador</label>
