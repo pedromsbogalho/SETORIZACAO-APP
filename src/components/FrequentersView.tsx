@@ -119,11 +119,40 @@ export default function FrequentersView({
   const [formAM, setFormAM] = useState('');
   const [formSetor, setFormSetor] = useState('');
   const [formBairro, setFormBairro] = useState('');
-  const [bairroIsExisting, setBairroIsExisting] = useState<boolean>(true);
-  const [newBairroModalOpen, setNewBairroModalOpen] = useState<boolean>(false);
-  const [newBairroText, setNewBairroText] = useState<string>('');
-  const [newBairroSetorText, setNewBairroSetorText] = useState<string>('');
-  const [newBairroAMText, setNewBairroAMText] = useState<string>('');
+
+  // Bairro -> (AM, Setor) inferidos a partir da base atual em `people`
+  const bairroOptions = React.useMemo(() => {
+    const map = new Map<string, { am: string; setor: string }>();
+    const pickUpper = (s: string) => (s || '').toUpperCase();
+
+    for (const p of people) {
+      if (p.subtipoCadastro !== 'FREQUENTADOR' && p.subtipoCadastro !== 'MEMBRO') continue;
+      const bairro = (p.bairroAjustado || '').trim();
+      if (!bairro) continue;
+
+      const bairroKey = pickUpper(bairro);
+      const amKey = pickUpper(p.am);
+      const setorKey = pickUpper(p.setor2);
+      if (!amKey && !setorKey) continue;
+
+      // Regra: você confirmou que não existe bairro com múltiplos AM/Setores.
+      if (!map.has(bairroKey)) {
+        map.set(bairroKey, { am: p.am, setor: p.setor2 });
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([bairroKey, v]) => ({
+        bairro: bairroKey,
+        am: v.am,
+        setor: v.setor
+      }))
+      .sort((a, b) => a.bairro.localeCompare(b.bairro, 'pt-BR'));
+  }, [people]);
+
+  const [bairroSelecionadoExistente, setBairroSelecionadoExistente] = useState<boolean>(true);
+  const [bairroManualAtivo, setBairroManualAtivo] = useState<boolean>(false);
+
   const [formIdFamilia, setFormIdFamilia] = useState('');
 
 
@@ -877,24 +906,63 @@ export default function FrequentersView({
 
                 <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Bairro Ajustado</label>
-                  <input 
-                    type="text"
-                    placeholder="EX: JARDIM AMÉRICA"
+                  <select
                     value={formBairro}
                     onChange={(e) => {
-                      const v = e.target.value;
-                      setFormBairro(v);
+                      const next = e.target.value;
+                      setFormBairro(next);
+
+                      const found = bairroOptions.find(o => o.bairro === (next || '').toUpperCase());
+                      if (found) {
+                        setFormAM(found.am || '');
+                        setFormSetor(found.setor || '');
+                        // quando achou no cadastro, travamos AM/Setor (via disabled no select)
+                        setBairroManualAtivo(false);
+                        setBairroSelecionadoExistente(true);
+                      } else {
+                        // opção “Outro”
+                        setBairroManualAtivo(true);
+                        setBairroSelecionadoExistente(false);
+                      }
                     }}
                     className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  />
+                  >
+                    {bairroOptions.length === 0 ? (
+                      <option value="">Selecione...</option>
+                    ) : (
+                      <>
+                        {bairroOptions.map(opt => (
+                          <option key={opt.bairro} value={opt.bairro}>{opt.bairro}</option>
+                        ))}
+                        <option value="OUTRO">Outro (digitar manualmente)</option>
+                      </>
+                    )}
+                  </select>
+
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      placeholder="EX: JARDIM AMÉRICA"
+                      value={bairroManualAtivo ? formBairro.replace(/^OUTRO\s*$/i, '') : formBairro}
+                      onChange={(e) => {
+                        setFormBairro(e.target.value);
+                        setBairroManualAtivo(true);
+                        setBairroSelecionadoExistente(false);
+                      }}
+                      disabled={!bairroManualAtivo}
+                      className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700 disabled:opacity-60' : 'bg-white border-zinc-200 disabled:opacity-50'} focus:outline-none`}
+                    />
+                  </div>
                 </div>
+
 
                 <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Assistente de Ministro (AM)</label>
                   <select 
                     value={formAM}
                     onChange={(e) => handleAMChange(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
+                    disabled={!bairroManualAtivo}
+                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700 disabled:opacity-60' : 'bg-white border-zinc-200 disabled:opacity-50'} focus:outline-none`}
                   >
                     <option value="">Selecione um AM...</option>
                     {structure.amList.map(am => (
@@ -907,7 +975,7 @@ export default function FrequentersView({
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Setor Auto-Preenchido</label>
                   <input 
                     type="text"
-                    disabled
+                    disabled={!bairroManualAtivo}
                     value={formSetor}
                     className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700 disabled:opacity-60' : 'bg-white border-zinc-200 disabled:opacity-60'} focus:outline-none`}
                   />
