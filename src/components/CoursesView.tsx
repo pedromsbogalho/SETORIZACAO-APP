@@ -66,28 +66,37 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
         const currentStatus = p.cursoPosOutorga.aulas[lessonNumber];
         const isConcluido = currentStatus === 'Concluído' || currentStatus === 'Concluido';
 
+        // Removido: “Em andamento”. Agora só alterna entre “Não iniciou” <-> “Concluído”
         const nextStatus: 'Não iniciou' | 'Concluído' | 'Concluido' = isConcluido ? 'Não iniciou' : 'Concluído';
-
         const nextAulas = { ...p.cursoPosOutorga.aulas, [lessonNumber]: nextStatus };
-        const currentConcluidosEm = p.cursoPosOutorga.concluidosEm || {};
 
-        const nextConcluidosEm = {
-          ...currentConcluidosEm,
-          ...(isConcluido ? { [lessonNumber]: undefined } : { [lessonNumber]: currentConcluidosEm?.[lessonNumber] || '' })
-        };
+        const currentConcluidosEm = (p.cursoPosOutorga as any).concluidosEm || {};
 
-        // remove key when undefined
-        if (nextConcluidosEm[lessonNumber] === undefined) {
-          const { [lessonNumber]: _, ...rest } = nextConcluidosEm as any;
+        // Se marcar como NÃO iniciado, remove a data.
+        // Se marcar como CONCLUÍDO, mantém a data atual se já houver (caso contrário fica vazio pra preencher).
+        if (isConcluido) {
+          const nextConcluidosEm = { ...currentConcluidosEm };
+          delete nextConcluidosEm[lessonNumber];
           return {
             ...p,
-            cursoPosOutorga: { ...p.cursoPosOutorga, aulas: nextAulas, concluidosEm: rest }
+            cursoPosOutorga: {
+              ...p.cursoPosOutorga,
+              aulas: nextAulas,
+              concluidosEm: nextConcluidosEm
+            }
           };
         }
 
         return {
           ...p,
-          cursoPosOutorga: { ...p.cursoPosOutorga, aulas: nextAulas, concluidosEm: nextConcluidosEm }
+          cursoPosOutorga: {
+            ...p.cursoPosOutorga,
+            aulas: nextAulas,
+            concluidosEm: {
+              ...currentConcluidosEm,
+              [lessonNumber]: currentConcluidosEm?.[lessonNumber] || ''
+            }
+          }
         };
       }
       return p;
@@ -107,6 +116,32 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
           cursoPosOutorga: {
             ...p.cursoPosOutorga,
             instrutores: nextInstrutores
+          }
+        };
+      }
+      return p;
+    });
+    onUpdatePeople(updated);
+  };
+
+  const handlePosOutorgaConcluidoEmChange = (
+    id: string,
+    lessonNumber: 1 | 2 | 3 | 4 | 5,
+    value: string
+  ) => {
+    const updated = people.map(p => {
+      if (p.id === id) {
+        const currentConcluidosEm = (p.cursoPosOutorga as any).concluidosEm || {};
+        const nextConcluidosEm = {
+          ...currentConcluidosEm,
+          [lessonNumber]: value
+        };
+
+        return {
+          ...p,
+          cursoPosOutorga: {
+            ...p.cursoPosOutorga,
+            concluidosEm: nextConcluidosEm
           }
         };
       }
@@ -669,6 +704,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
 
           <p className="text-xs text-zinc-400 italic">
             💡 Dica: Clique no botão da aula para alternar entre: <span className="text-red-400 font-semibold">Não iniciou</span> ➔ <span className="text-emerald-500 font-semibold">Concluído</span>.
+            Ao marcar como concluído, preencha a data em “Concluído em”.
           </p>
 
           <div className="overflow-x-auto">
@@ -764,7 +800,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                               }
 
                               return (
-                                <td key={lessonNum} className="py-2 px-1 text-center align-top">
+                          <td key={lessonNum} className="py-2 px-1 text-center align-top">
                                   <button 
                                     id={`btn-toggle-lesson-${p.id}-${lessonNum}`}
                                     onClick={() => handlePosOutorgaLessonToggle(p.id, lessonNum)}
@@ -772,6 +808,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                                   >
                                     {lessonStatus}
                                   </button>
+
                                   <input
                                     type="text"
                                     value={instructorValue}
@@ -779,6 +816,17 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                                     placeholder="Instrutor"
                                     className={`mt-2 w-full rounded-md border px-2 py-1 text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-zinc-700'} focus:outline-none`}
                                   />
+
+                                  {(lessonStatus === 'Concluido' || lessonStatus === 'Concluído') && (
+                                    <div className="mt-2">
+                                      <input
+                                        type="date"
+                                        value={((p.cursoPosOutorga as any).concluidosEm || {})[lessonNum] || ''}
+                                        onChange={(e) => handlePosOutorgaConcluidoEmChange(p.id, lessonNum, e.target.value)}
+                                        className={`w-full rounded-md border px-2 py-1 text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-zinc-700'} focus:outline-none`}
+                                      />
+                                    </div>
+                                  )}
                                 </td>
                               );
                             })}
