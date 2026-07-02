@@ -26,12 +26,22 @@ export interface CursoIniciacao {
 
 export interface CursoPosOutorga {
   // Aula 1, 2, 3, 4, 5
+  // Importante: agora não existe mais “Em andamento”; apenas “Não iniciou” e “Concluído/Concluido”.
   aulas: {
-    1: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
-    2: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
-    3: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
-    4: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
-    5: 'Não iniciou' | 'Em andamento' | 'Concluído' | 'Concluido';
+    1: 'Não iniciou' | 'Concluído' | 'Concluido';
+    2: 'Não iniciou' | 'Concluído' | 'Concluido';
+    3: 'Não iniciou' | 'Concluído' | 'Concluido';
+    4: 'Não iniciou' | 'Concluído' | 'Concluido';
+    5: 'Não iniciou' | 'Concluído' | 'Concluido';
+  };
+
+  // Data em que a aula foi concluída (YYYY-MM-DD)
+  concluidosEm?: {
+    1?: string;
+    2?: string;
+    3?: string;
+    4?: string;
+    5?: string;
   };
   instrutores?: {
     1?: string;

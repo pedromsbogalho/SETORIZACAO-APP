@@ -64,20 +64,30 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
     const updated = people.map(p => {
       if (p.id === id) {
         const currentStatus = p.cursoPosOutorga.aulas[lessonNumber];
-        let nextStatus: 'Não iniciou' | 'Em andamento' | 'Concluído' = 'Não iniciou';
-        
-        if (currentStatus === 'Não iniciou' || !currentStatus) {
-          nextStatus = 'Em andamento';
-        } else if (currentStatus === 'Em andamento') {
-          nextStatus = 'Concluído';
-        } else {
-          nextStatus = 'Não iniciou';
-        }
+        const isConcluido = currentStatus === 'Concluído' || currentStatus === 'Concluido';
+
+        const nextStatus: 'Não iniciou' | 'Concluído' | 'Concluido' = isConcluido ? 'Não iniciou' : 'Concluído';
 
         const nextAulas = { ...p.cursoPosOutorga.aulas, [lessonNumber]: nextStatus };
+        const currentConcluidosEm = p.cursoPosOutorga.concluidosEm || {};
+
+        const nextConcluidosEm = {
+          ...currentConcluidosEm,
+          ...(isConcluido ? { [lessonNumber]: undefined } : { [lessonNumber]: currentConcluidosEm?.[lessonNumber] || '' })
+        };
+
+        // remove key when undefined
+        if (nextConcluidosEm[lessonNumber] === undefined) {
+          const { [lessonNumber]: _, ...rest } = nextConcluidosEm as any;
+          return {
+            ...p,
+            cursoPosOutorga: { ...p.cursoPosOutorga, aulas: nextAulas, concluidosEm: rest }
+          };
+        }
+
         return {
           ...p,
-          cursoPosOutorga: { ...p.cursoPosOutorga, aulas: nextAulas }
+          cursoPosOutorga: { ...p.cursoPosOutorga, aulas: nextAulas, concluidosEm: nextConcluidosEm }
         };
       }
       return p;
@@ -203,12 +213,12 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
   }, [posOutorgaFiltered, selectedInstructorFilter]);
 
   const posOutorgaStats = useMemo(() => {
-    const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; inProgress: number; notStarted: number }> = {
-      1: { completed: 0, inProgress: 0, notStarted: 0 },
-      2: { completed: 0, inProgress: 0, notStarted: 0 },
-      3: { completed: 0, inProgress: 0, notStarted: 0 },
-      4: { completed: 0, inProgress: 0, notStarted: 0 },
-      5: { completed: 0, inProgress: 0, notStarted: 0 },
+    const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; notStarted: number }> = {
+      1: { completed: 0, notStarted: 0 },
+      2: { completed: 0, notStarted: 0 },
+      3: { completed: 0, notStarted: 0 },
+      4: { completed: 0, notStarted: 0 },
+      5: { completed: 0, notStarted: 0 },
     };
 
     const sectors: Record<string, number> = {};
@@ -223,9 +233,6 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
         const status = aulas[num] || 'Não iniciou';
         if (status === 'Concluido' || status === 'Concluído') {
           lessons[num].completed++;
-          hasParticipated = true;
-        } else if (status === 'Em andamento') {
-          lessons[num].inProgress++;
           hasParticipated = true;
         } else {
           lessons[num].notStarted++;
@@ -592,10 +599,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                         <span>Fizeram:</span>
                         <span>{stats.completed}</span>
                       </div>
-                      <div className="flex justify-between text-orange-500 font-semibold">
-                        <span>Fazendo:</span>
-                        <span>{stats.inProgress}</span>
-                      </div>
+
                       <div className="flex justify-between text-zinc-400">
                         <span>Pendente:</span>
                         <span>{stats.notStarted}</span>
@@ -664,7 +668,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
           </div>
 
           <p className="text-xs text-zinc-400 italic">
-            💡 Dica: Clique no botão da aula para alternar entre: <span className="text-red-400 font-semibold">Não iniciou</span> ➔ <span className="text-orange-500 font-semibold">Em andamento</span> ➔ <span className="text-emerald-500 font-semibold">Concluído</span>.
+            💡 Dica: Clique no botão da aula para alternar entre: <span className="text-red-400 font-semibold">Não iniciou</span> ➔ <span className="text-emerald-500 font-semibold">Concluído</span>.
           </p>
 
           <div className="overflow-x-auto">
@@ -757,8 +761,6 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                               let btnStyle = 'bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 border border-zinc-200 dark:border-zinc-700';
                               if (lessonStatus === 'Concluido' || lessonStatus === 'Concluído') {
                                  btnStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs';
-                              } else if (lessonStatus === 'Em andamento') {
-                                 btnStyle = 'bg-orange-500 hover:bg-orange-600 text-white font-bold border border-orange-500 shadow-xs';
                               }
 
                               return (
