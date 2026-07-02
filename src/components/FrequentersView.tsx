@@ -119,7 +119,13 @@ export default function FrequentersView({
   const [formAM, setFormAM] = useState('');
   const [formSetor, setFormSetor] = useState('');
   const [formBairro, setFormBairro] = useState('');
+  const [bairroIsExisting, setBairroIsExisting] = useState<boolean>(true);
+  const [newBairroModalOpen, setNewBairroModalOpen] = useState<boolean>(false);
+  const [newBairroText, setNewBairroText] = useState<string>('');
+  const [newBairroSetorText, setNewBairroSetorText] = useState<string>('');
+  const [newBairroAMText, setNewBairroAMText] = useState<string>('');
   const [formIdFamilia, setFormIdFamilia] = useState('');
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
