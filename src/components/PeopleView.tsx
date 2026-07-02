@@ -291,6 +291,15 @@ export default function PeopleView({
     resetForm();
   };
 
+  const normalizeName = (s: string) => {
+    return (s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const handleImportCSVText = () => {
     try {
       if (!csvText.trim()) {
@@ -303,6 +312,17 @@ export default function PeopleView({
         return;
       }
 
+      // Frequentadores base (para validação futura)
+      const frequenters = people.filter(p => p.subtipoCadastro === 'FREQUENTADOR');
+      const frequentersByName = new Map<string, Person[]>();
+      frequenters.forEach(f => {
+        const key = normalizeName(f.nome);
+        if (!key) return;
+        const list = frequentersByName.get(key) || [];
+        list.push(f);
+        frequentersByName.set(key, list);
+      });
+
       // Enforce subtipo as MEMBRO for this page
       const finalImported: Person[] = parsed.map(p => ({
         ...p,
@@ -314,6 +334,7 @@ export default function PeopleView({
         gruposWhats: p.gruposWhats || { grupoSetor: true, grupoGeral: true, grupoLar: true }
       } as Person));
 
+
       // Match AM Sector if AM exists in structure
       finalImported.forEach(p => {
         if (p.am) {
@@ -323,6 +344,38 @@ export default function PeopleView({
           }
         }
       });
+
+      // Validation: ao importar MEMBROS, detecta convergência com FREQUENTADORES pelo NOME
+      // Se houver correspondência, pergunta se deseja atualizar os dados vindos da planilha.
+      const importMatches: Array<{ imported: Person; frequenters: Person[] }> = [];
+      finalImported.forEach(imp => {
+        const key = normalizeName(imp.nome);
+        if (!key) return;
+        const hits = frequentersByName.get(key) || [];
+        if (hits.length > 0) {
+          importMatches.push({ imported: imp, frequenters: hits });
+        }
+      });
+
+      if (importMatches.length > 0) {
+        const first = importMatches[0];
+        const frequentersPreview = first.frequenters
+          .slice(0, 5)
+          .map(f => `• ${f.nome} (ID: ${f.id}, Cel: ${f.celularPrincipal || 'N/A'})`)
+          .join('\n');
+
+        const ok = confirm(
+          `Encontramos na base de frequentadores dados que convergem com a planilha de membros (por NOME).\n\n` +
+          `Planilha: ${first.imported.nome} (ID: ${first.imported.id})\n` +
+          `Correspondências:\n${frequentersPreview}\n\n` +
+          `Deseja atualizar o cadastro de membro usando os dados da planilha?`
+        );
+
+        if (!ok) {
+          setErrorMsg('Importação cancelada após validação com frequentadores.')
+          return;
+        }
+      }
 
       const peopleMap = new Map(people.map(p => [p.id, p]));
       finalImported.forEach(imp => {

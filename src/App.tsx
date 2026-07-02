@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Person, Family, UserRole, JohreiCenterStructure, AppUser } from './types';
+import { Person, Family, UserRole, JohreiCenterStructure, AppUser, StatusAtual } from './types';
 import { INITIAL_PEOPLE, INITIAL_FAMILIES } from './demoData';
 import DashboardView from './components/DashboardView';
 import PeopleView from './components/PeopleView';
@@ -262,6 +262,13 @@ export default function App() {
     return normalized === '' ? existing : incoming;
   };
 
+  // Same semantics as chooseString, but keeps the returned type.
+  const chooseStatusAtual = (existing: StatusAtual, incoming?: StatusAtual): StatusAtual => {
+    if (incoming === undefined || incoming === null) return existing;
+    const normalized = incoming.toString().trim();
+    return normalized === '' ? existing : incoming;
+  };
+
   const mergePersonData = (existing: Person, incoming: Partial<Person>): Person => {
     const mergedJornadaDatas = {
       ...existing.jornadaDatas,
@@ -294,8 +301,11 @@ export default function App() {
 
     const mergedJornadaMembro = existing.jornadaMembro || incoming.jornadaMembro
       ? {
-          ...(existing.jornadaMembro || {}),
-          ...(incoming.jornadaMembro || {}),
+          ...(existing.jornadaMembro || ({} as any)),
+          ...(incoming.jornadaMembro || ({} as any)),
+          // Ajuste de compatibilidade com a modelagem de tipo atual do projeto.
+          // Se `donativo` não existir em um dos lados, mantemos como string vazia.
+          donativo: (existing.jornadaMembro?.donativo ?? incoming.jornadaMembro?.donativo ?? 'Mensal') as any,
           purificacoes: {
             ...existing.jornadaMembro?.purificacoes,
             ...incoming.jornadaMembro?.purificacoes
@@ -312,7 +322,7 @@ export default function App() {
       ...incoming,
       nome: chooseString(existing.nome, incoming.nome),
       tipoCadastro: chooseString(existing.tipoCadastro, incoming.tipoCadastro),
-      statusAtual: chooseString(existing.statusAtual, incoming.statusAtual),
+      statusAtual: chooseStatusAtual(existing.statusAtual, incoming.statusAtual as StatusAtual),
       nascimento: chooseString(existing.nascimento, incoming.nascimento),
       celularPrincipal: chooseString(existing.celularPrincipal, incoming.celularPrincipal),
       telefoneContato: chooseString(existing.telefoneContato, incoming.telefoneContato),

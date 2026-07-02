@@ -114,17 +114,12 @@ export default function FrequentersView({
   const [formNome, setFormNome] = useState('');
   const [formTipo, setFormTipo] = useState('Frequente');
   const [formStatus, setFormStatus] = useState<StatusAtual>('ATIVO');
-  const [formNascimento, setFormNascimento] = useState('1995-01-01');
-  const [formIdade, setFormIdade] = useState(30);
   const [formCelular, setFormCelular] = useState('');
-  const [formEmail, setFormEmail] = useState('');
   const [formEndCompleto, setFormEndCompleto] = useState('');
   const [formAM, setFormAM] = useState('');
   const [formSetor, setFormSetor] = useState('');
-  const [formAF, setFormAF] = useState('');
   const [formBairro, setFormBairro] = useState('');
   const [formIdFamilia, setFormIdFamilia] = useState('');
-  const [formJornada, setFormJornada] = useState<JornadaEtapa>('Primeiro atendimento');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -133,17 +128,12 @@ export default function FrequentersView({
     setFormNome('');
     setFormTipo('Frequente');
     setFormStatus('ATIVO');
-    setFormNascimento('1995-01-01');
-    setFormIdade(30);
     setFormCelular('');
-    setFormEmail('');
     setFormEndCompleto('');
     setFormAM('');
     setFormSetor('');
-    setFormAF('');
     setFormBairro('');
     setFormIdFamilia('');
-    setFormJornada('Primeiro atendimento');
     setSelectedPerson(null);
   };
 
@@ -156,9 +146,7 @@ export default function FrequentersView({
       setFormSetor(structure.amList[0].sector);
     }
     // Default to first AF if available
-    if (structure.afList.length > 0) {
-      setFormAF(structure.afList[0].name);
-    }
+
     setIsModalOpen(true);
   };
 
@@ -168,17 +156,12 @@ export default function FrequentersView({
     setFormNome(person.nome);
     setFormTipo(person.tipoCadastro);
     setFormStatus(person.statusAtual);
-    setFormNascimento(person.nascimento);
-    setFormIdade(person.idade);
     setFormCelular(person.celularPrincipal);
-    setFormEmail(person.email);
     setFormEndCompleto(person.endCompleto);
     setFormAM(person.am);
     setFormSetor(person.setor2);
-    setFormAF(person.af2);
     setFormBairro(person.bairroAjustado);
     setFormIdFamilia(person.idFamilia);
-    setFormJornada(person.jornadaEtapa);
     setIsModalOpen(true);
   };
 
@@ -210,23 +193,23 @@ export default function FrequentersView({
       tipoCadastro: formTipo,
       subtipoCadastro: 'FREQUENTADOR',
       statusAtual: formStatus,
-      nascimento: formNascimento,
-      idade: Number(formIdade) || 0,
+      nascimento: selectedPerson?.nascimento || '1995-01-01',
+      idade: selectedPerson?.idade ?? 0,
       celularPrincipal: formCelular,
       telefoneContato: formCelular,
-      email: formEmail,
-      ultimoAcessoApp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      email: selectedPerson?.email || '',
+      ultimoAcessoApp: selectedPerson?.ultimoAcessoApp || new Date().toISOString().replace('T', ' ').substring(0, 19),
       endCompleto: formEndCompleto,
       am: formAM.toUpperCase(),
       setor2: formSetor.toUpperCase(),
-      af2: formAF.toUpperCase(),
+      af2: selectedPerson?.af2 || '',
       endGoogle: `${formEndCompleto} - ${formBairro}`,
       bairroAjustado: formBairro,
-      dataOutorga: '',
-      tempoMembro: '',
-      anoOutorga: '',
-      idFamilia: formIdFamilia || `FAM-${Math.floor(Math.random() * 800) + 100}`,
-      jornadaEtapa: formJornada,
+      dataOutorga: selectedPerson?.dataOutorga || '',
+      tempoMembro: selectedPerson?.tempoMembro || '',
+      anoOutorga: selectedPerson?.anoOutorga || '',
+      idFamilia: formIdFamilia || selectedPerson?.idFamilia || `FAM-${Math.floor(Math.random() * 800) + 100}`,
+      jornadaEtapa: selectedPerson?.jornadaEtapa || 'Primeiro atendimento',
       jornadaDatas: selectedPerson?.jornadaDatas || {
         'Primeiro atendimento': new Date().toISOString().substring(0, 10)
       },
@@ -873,19 +856,7 @@ export default function FrequentersView({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Status de Cadastro</label>
-                  <select 
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as StatusAtual)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  >
-                    <option value="ATIVO">ATIVO</option>
-                    <option value="INATIVO">INATIVO</option>
-                    <option value="AFASTADO">AFASTADO</option>
-                    <option value="FALECIDO">FALECIDO</option>
-                  </select>
-                </div>
+
 
                 <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Assistente de Ministro (AM)</label>
@@ -922,16 +893,7 @@ export default function FrequentersView({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">E-mail</label>
-                  <input 
-                    type="email"
-                    placeholder="EX: email@gmail.com"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  />
-                </div>
+
 
                 <div>
                   <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Endereço de Residência</label>
@@ -955,30 +917,9 @@ export default function FrequentersView({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Assistente de Família (AF)</label>
-                  <select 
-                    value={formAF}
-                    onChange={(e) => setFormAF(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  >
-                    <option value="">Selecione um AF...</option>
-                    {structure.afList.map(af => (
-                      <option key={af.id} value={af.name}>{af.name}</option>
-                    ))}
-                  </select>
-                </div>
 
-                <div>
-                  <label className="block text-xxs font-mono uppercase text-zinc-400 mb-1">Código de Família Associado</label>
-                  <input 
-                    type="text"
-                    placeholder="EX: FAM-101 (Deixe em branco para auto-gerar)"
-                    value={formIdFamilia}
-                    onChange={(e) => setFormIdFamilia(e.target.value)}
-                    className={`w-full p-2.5 text-xs rounded-lg border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} focus:outline-none`}
-                  />
-                </div>
+
+
               </div>
 
               <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-200/40 dark:border-white/5">

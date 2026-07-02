@@ -78,7 +78,7 @@ export default function FamiliesView({ families, onUpdateFamilies, people, isDar
   const neighborhoodOptions = useMemo(() => {
     const counts: Record<string, number> = {};
 
-    Object.values(familyNeighborhoodsMap).forEach(neighborhoods => {
+    Object.values(familyNeighborhoodsMap).forEach((neighborhoods: string[]) => {
       neighborhoods.forEach(neighbor => {
         if (!neighbor || neighbor === 'SEM BAIRRO') return;
         counts[neighbor] = (counts[neighbor] || 0) + 1;
