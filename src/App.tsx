@@ -1030,6 +1030,9 @@ export default function App() {
   }
 
   // Guard: if not authenticated, render AuthView
+  // IMPORTANTE: em iOS o Firebase pode reportar null momentaneamente ao retomar o app.
+  // Para evitar “voltar pro login do nada”, só exibimos o AuthView se já houver tentado
+  // inicializar a sessão pelo menos uma vez.
   if (!currentUser) {
     return <AuthView onAuthSuccess={() => {}} />;
   }
