@@ -22,6 +22,100 @@ interface CoursesViewProps {
 
 export default function CoursesView({ people, onUpdatePeople, isDark, currentUserName }: CoursesViewProps) {
   const [activeTab, setActiveTab] = useState<'iniciacao' | 'pos-outorga'>('iniciacao');
+
+  const getAulaStatus = (person: any, lessonNumber: 1 | 2 | 3 | 4 | 5): 'Não iniciou' | 'Concluído' | 'Concluido' => {
+    return person?.cursoIniciacao?.aulas?.[lessonNumber] ?? person?.cursoIniciacao?.concluido
+      ? 'Concluído'
+      : 'Não iniciou';
+  };
+
+  const setAulaStatusForIniciacao = (
+    id: string,
+    lessonNumber: 1 | 2 | 3 | 4 | 5,
+    nextStatus: 'Não iniciou' | 'Concluído' | 'Concluido'
+  ) => {
+    const updated = people.map(p => {
+      if (p.id !== id) return p;
+
+      const currentAulas = (p.cursoIniciacao as any)?.aulas || {};
+      const nextAulas = { ...currentAulas, [lessonNumber]: nextStatus };
+
+      const nextIniciacao: any = {
+        ...p.cursoIniciacao,
+        aulas: nextAulas,
+      };
+
+      // Se concluir todas as 5, reflete também em concluido do status geral
+      const allConcluded = ([1, 2, 3, 4, 5] as const).every(num => {
+        const s = nextAulas[num];
+        return s === 'Concluído' || s === 'Concluido';
+      });
+
+      if (allConcluded) {
+        nextIniciacao.concluido = true;
+        nextIniciacao.presenca = true;
+      } else {
+        // Para manter consistente com o seu modelo antigo: se não concluiu tudo, marca como pendente
+        nextIniciacao.concluido = false;
+        nextIniciacao.presenca = Boolean(nextIniciacao.presenca);
+      }
+
+      return {
+        ...p,
+        cursoIniciacao: nextIniciacao,
+      };
+    });
+
+    onUpdatePeople(updated);
+  };
+
+  const handleIniciacaoAulaSingleToggle = (id: string, checked: boolean) => {
+    const updated = people.map(p => {
+      if (p.id !== id) return p;
+
+      const aulaUnicaData = (p.cursoIniciacao as any)?.data;
+      const aulaUnicaInstrutor = (p.cursoIniciacao as any)?.instrutor;
+
+      const nextAulas: any = {
+        1: checked ? 'Concluído' : 'Não iniciou',
+        2: checked ? 'Concluído' : 'Não iniciou',
+        3: checked ? 'Concluído' : 'Não iniciou',
+        4: checked ? 'Concluído' : 'Não iniciou',
+        5: checked ? 'Concluído' : 'Não iniciou',
+      };
+
+      // Datas/Instrutores por aula (UI) - persistindo no runtime como campos opcionais
+      const currentDataByLesson = ((p.cursoIniciacao as any) || {}).dataPorAula || {};
+      const currentInstrutoresByLesson = ((p.cursoIniciacao as any) || {}).instrutoresPorAula || {};
+
+      const nextDataByLesson = { ...currentDataByLesson };
+      const nextInstrutoresByLesson = { ...currentInstrutoresByLesson };
+
+      ([1, 2, 3, 4, 5] as const).forEach(num => {
+        if (checked) {
+          nextDataByLesson[num] = aulaUnicaData || '';
+          nextInstrutoresByLesson[num] = aulaUnicaInstrutor || '';
+        } else {
+          delete nextDataByLesson[num];
+          delete nextInstrutoresByLesson[num];
+        }
+      });
+
+      return {
+        ...p,
+        cursoIniciacao: {
+          ...p.cursoIniciacao,
+          concluido: checked,
+          presenca: checked ? true : Boolean((p.cursoIniciacao as any)?.presenca),
+          aulas: nextAulas,
+          dataPorAula: nextDataByLesson,
+          instrutoresPorAula: nextInstrutoresByLesson,
+        },
+      };
+    });
+
+    onUpdatePeople(updated);
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [memberTimeFilter, setMemberTimeFilter] = useState<'all' | 'recent' | '1-3' | '3plus' | 'none'>('all');
@@ -425,7 +519,19 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
           <div className="p-6 rounded-xl glass-panel shadow-sm space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-200/40 dark:border-white/5">
               <BookOpen className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-              <h3 className="text-sm font-sans font-bold">Pricípios messiânicos</h3>
+              <h3 className="text-sm font-sans font-bold">Princípios messiânicos</h3>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50/50 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  Aula única concluída (conclui as 5 aulas automaticamente)
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                Use este botão quando a pessoa já concluiu o conteúdo completo.
+              </p>
             </div>
 
             <div className="overflow-x-auto">
@@ -458,14 +564,54 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                             {ci.concluido ? 'CONCLUÍDO' : 'PENDENTE'}
                           </span>
                         </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-1">
+                    <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
                             <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                             <input 
-                              id={`ci-date-${p.id}`}
+                              id={`ci-aula-unica-toggle-${p.id}`}
                               type="date" 
-                              value={ci.data || ''} 
-                              onChange={(e) => handleIniciacaoChange(p.id, 'data', e.target.value)}
+                              value={(ci as any)?.dataPorAula?.[1] || ci.data || ''}
+                              onChange={(e) => {
+                                // Mantém data única (também copia para todas as 5)
+                                const value = e.target.value;
+                                const aulaUnicaInstrutor = (ci as any)?.instrutor || '';
+                                const updated = people.map(pp => {
+                                  if (pp.id !== p.id) return pp;
+                                  const next: any = {
+                                    ...pp,
+                                    cursoIniciacao: {
+                                      ...pp.cursoIniciacao,
+                                      data: value,
+                                      instrutor: aulaUnicaInstrutor,
+                                      presenca: Boolean(value),
+                                      concluido: Boolean(value),
+                                      aulas: {
+                                        1: value ? 'Concluído' : 'Não iniciou',
+                                        2: value ? 'Concluído' : 'Não iniciou',
+                                        3: value ? 'Concluído' : 'Não iniciou',
+                                        4: value ? 'Concluído' : 'Não iniciou',
+                                        5: value ? 'Concluído' : 'Não iniciou',
+                                      },
+                                      dataPorAula: {
+                                        1: value,
+                                        2: value,
+                                        3: value,
+                                        4: value,
+                                        5: value,
+                                      },
+                                      instrutoresPorAula: {
+                                        1: aulaUnicaInstrutor,
+                                        2: aulaUnicaInstrutor,
+                                        3: aulaUnicaInstrutor,
+                                        4: aulaUnicaInstrutor,
+                                        5: aulaUnicaInstrutor,
+                                      },
+                                    },
+                                  };
+                                  return next;
+                                });
+                                onUpdatePeople(updated);
+                              }}
                               className={`p-1 rounded border text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-zinc-200 text-zinc-700'} focus:outline-none font-mono`}
                             />
                           </div>
@@ -478,7 +624,38 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                               type="text" 
                               placeholder="Nome do Instrutor"
                               value={ci.instrutor || ''} 
-                              onChange={(e) => handleIniciacaoChange(p.id, 'instrutor', e.target.value)}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const updated = people.map(pp => {
+                                  if (pp.id !== p.id) return pp;
+                                  const aulaUnicaData = (pp.cursoIniciacao as any)?.data || (pp.cursoIniciacao as any)?.dataPorAula?.[1] || '';
+                                  const status = value.trim() && aulaUnicaData ? 'Concluído' : 'Não iniciou';
+                                  return {
+                                    ...pp,
+                                    cursoIniciacao: {
+                                      ...pp.cursoIniciacao,
+                                      instrutor: value,
+                                      presenca: Boolean(aulaUnicaData),
+                                      concluido: Boolean(aulaUnicaData),
+                                      aulas: {
+                                        1: status,
+                                        2: status,
+                                        3: status,
+                                        4: status,
+                                        5: status,
+                                      },
+                                      instrutoresPorAula: {
+                                        1: value,
+                                        2: value,
+                                        3: value,
+                                        4: value,
+                                        5: value,
+                                      },
+                                    },
+                                  };
+                                });
+                                onUpdatePeople(updated);
+                              }}
                               className={`p-1 rounded border text-[10px] w-32 ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-zinc-200 text-zinc-700'} focus:outline-none`}
                             />
                           </div>
@@ -498,13 +675,13 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                         <td className="py-3 px-3 text-right">
                           <label className="inline-flex items-center gap-1.5 select-none cursor-pointer">
                             <input 
-                              id={`ci-concluido-${p.id}`}
+                              id={`ci-aula-unica-${p.id}`}
                               type="checkbox" 
-                              checked={ci.concluido}
-                              onChange={(e) => handleIniciacaoChange(p.id, 'concluido', e.target.checked)}
+                              checked={Boolean((ci as any)?.concluido)}
+                              onChange={(e) => handleIniciacaoAulaSingleToggle(p.id, e.target.checked)}
                               className="rounded accent-teal-500 h-3.5 w-3.5 cursor-pointer"
                             />
-                            <span className="font-bold text-teal-600 dark:text-teal-400">Aprovado</span>
+                            <span className="font-bold text-teal-600 dark:text-teal-400">Aula única concluída</span>
                           </label>
                         </td>
                       </tr>
