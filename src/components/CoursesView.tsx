@@ -475,27 +475,68 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
           <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>Acompanhe o progresso dos membros nos cursos de Iniciação e Pós-Outorga.</p>
         </div>
 
-        {/* Tab switchers (mantidos por segurança do UI atual) */}
-        <div
-          className={`p-1 rounded-lg border flex gap-1 backdrop-blur-md ${isDark ? 'bg-zinc-950/40 border-zinc-800' : 'bg-slate-100/40 border-slate-200'}`}
-        >
+        {/* Menus diferentes (estilo páginas) */}
+        <div className="flex gap-3">
           <button
-            id="tab-iniciacao"
+            id="menu-principios"
             onClick={() => setActiveTab('iniciacao')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-              activeTab === 'iniciacao' ? 'bg-teal-600 text-white shadow-xs' : 'text-zinc-500 hover:text-teal-500'
+            className={`flex-1 min-w-[190px] text-left rounded-xl border px-4 py-3 transition-all cursor-pointer backdrop-blur-md ${
+              activeTab === 'iniciacao'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                : isDark
+                  ? 'bg-zinc-950/30 border-white/10 text-zinc-300 hover:bg-zinc-950/50'
+                  : 'bg-white/60 border-slate-200 text-slate-700 hover:bg-white'
             }`}
           >
-            Principios
+            <div className="flex items-start gap-3">
+              <div
+                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  activeTab === 'iniciacao'
+                    ? 'bg-white/15'
+                    : 'bg-teal-500/10'
+                }`}
+              >
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-extrabold uppercase tracking-wider">Menu</div>
+                <div className="text-sm font-bold">Princípios</div>
+                <div className={`text-[10px] mt-0.5 ${activeTab === 'iniciacao' ? 'text-white/80' : isDark ? 'text-zinc-400' : 'text-slate-400'}`}>
+                  5 aulas + Aula única
+                </div>
+              </div>
+            </div>
           </button>
+
           <button
-            id="tab-pos-outorga"
+            id="menu-pos-outorga"
             onClick={() => setActiveTab('pos-outorga')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-              activeTab === 'pos-outorga' ? 'bg-teal-600 text-white shadow-xs' : 'text-zinc-500 hover:text-teal-500'
+            className={`flex-1 min-w-[190px] text-left rounded-xl border px-4 py-3 transition-all cursor-pointer backdrop-blur-md ${
+              activeTab === 'pos-outorga'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                : isDark
+                  ? 'bg-zinc-950/30 border-white/10 text-zinc-300 hover:bg-zinc-950/50'
+                  : 'bg-white/60 border-slate-200 text-slate-700 hover:bg-white'
             }`}
           >
-            Pós-Outorga
+            <div className="flex items-start gap-3">
+              <div
+                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  activeTab === 'pos-outorga'
+                    ? 'bg-white/15'
+                    : 'bg-teal-500/10'
+                }`}
+              >
+                <Award className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-extrabold uppercase tracking-wider">Menu</div>
+                <div className="text-sm font-bold">Pós-Outorga</div>
+                <div className={`text-[10px] mt-0.5 ${activeTab === 'pos-outorga' ? 'text-white/80' : isDark ? 'text-zinc-400' : 'text-slate-400'}`}>
+                  5 aulas com data e instrutor
+                </div>
+              </div>
+            </div>
           </button>
         </div>
       </div>
