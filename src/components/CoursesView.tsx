@@ -5,7 +5,18 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Person, ComentarioJornada } from '../types';
-import { BookOpen, CheckCircle, Award, Calendar, User, Search, Play, HelpCircle, Clock, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  BookOpen,
+  CheckCircle,
+  Award,
+  Calendar,
+  User,
+  Search,
+  Clock,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
 interface UpdatePeopleOptions {
   skipAuditLogs?: boolean;
@@ -20,109 +31,28 @@ interface CoursesViewProps {
   currentUserName?: string;
 }
 
+const LESSONS = [1, 2, 3, 4, 5] as const;
+
+type LessonNumber = (typeof LESSONS)[number];
+
+type LessonStatus = 'Não iniciado' | 'Concluído' | 'Concluido';
+
+function isConcludedStatus(v: unknown): v is 'Concluído' | 'Concluido' {
+  return v === 'Concluído' || v === 'Concluido';
+}
+
 export default function CoursesView({ people, onUpdatePeople, isDark, currentUserName }: CoursesViewProps) {
   const [activeTab, setActiveTab] = useState<'iniciacao' | 'pos-outorga'>('iniciacao');
 
-  const getAulaStatus = (person: any, lessonNumber: 1 | 2 | 3 | 4 | 5): 'Não iniciou' | 'Concluído' | 'Concluido' => {
-    return person?.cursoIniciacao?.aulas?.[lessonNumber] ?? person?.cursoIniciacao?.concluido
-      ? 'Concluído'
-      : 'Não iniciou';
-  };
-
-  const setAulaStatusForIniciacao = (
-    id: string,
-    lessonNumber: 1 | 2 | 3 | 4 | 5,
-    nextStatus: 'Não iniciou' | 'Concluído' | 'Concluido'
-  ) => {
-    const updated = people.map(p => {
-      if (p.id !== id) return p;
-
-      const currentAulas = (p.cursoIniciacao as any)?.aulas || {};
-      const nextAulas = { ...currentAulas, [lessonNumber]: nextStatus };
-
-      const nextIniciacao: any = {
-        ...p.cursoIniciacao,
-        aulas: nextAulas,
-      };
-
-      // Se concluir todas as 5, reflete também em concluido do status geral
-      const allConcluded = ([1, 2, 3, 4, 5] as const).every(num => {
-        const s = nextAulas[num];
-        return s === 'Concluído' || s === 'Concluido';
-      });
-
-      if (allConcluded) {
-        nextIniciacao.concluido = true;
-        nextIniciacao.presenca = true;
-      } else {
-        // Para manter consistente com o seu modelo antigo: se não concluiu tudo, marca como pendente
-        nextIniciacao.concluido = false;
-        nextIniciacao.presenca = Boolean(nextIniciacao.presenca);
-      }
-
-      return {
-        ...p,
-        cursoIniciacao: nextIniciacao,
-      };
-    });
-
-    onUpdatePeople(updated);
-  };
-
-  const handleIniciacaoAulaSingleToggle = (id: string, checked: boolean) => {
-    const updated = people.map(p => {
-      if (p.id !== id) return p;
-
-      const aulaUnicaData = (p.cursoIniciacao as any)?.data;
-      const aulaUnicaInstrutor = (p.cursoIniciacao as any)?.instrutor;
-
-      const nextAulas: any = {
-        1: checked ? 'Concluído' : 'Não iniciou',
-        2: checked ? 'Concluído' : 'Não iniciou',
-        3: checked ? 'Concluído' : 'Não iniciou',
-        4: checked ? 'Concluído' : 'Não iniciou',
-        5: checked ? 'Concluído' : 'Não iniciou',
-      };
-
-      // Datas/Instrutores por aula (UI) - persistindo no runtime como campos opcionais
-      const currentDataByLesson = ((p.cursoIniciacao as any) || {}).dataPorAula || {};
-      const currentInstrutoresByLesson = ((p.cursoIniciacao as any) || {}).instrutoresPorAula || {};
-
-      const nextDataByLesson = { ...currentDataByLesson };
-      const nextInstrutoresByLesson = { ...currentInstrutoresByLesson };
-
-      ([1, 2, 3, 4, 5] as const).forEach(num => {
-        if (checked) {
-          nextDataByLesson[num] = aulaUnicaData || '';
-          nextInstrutoresByLesson[num] = aulaUnicaInstrutor || '';
-        } else {
-          delete nextDataByLesson[num];
-          delete nextInstrutoresByLesson[num];
-        }
-      });
-
-      return {
-        ...p,
-        cursoIniciacao: {
-          ...p.cursoIniciacao,
-          concluido: checked,
-          presenca: checked ? true : Boolean((p.cursoIniciacao as any)?.presenca),
-          aulas: nextAulas,
-          dataPorAula: nextDataByLesson,
-          instrutoresPorAula: nextInstrutoresByLesson,
-        },
-      };
-    });
-
-    onUpdatePeople(updated);
-  };
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [memberTimeFilter, setMemberTimeFilter] = useState<'all' | 'recent' | '1-3' | '3plus' | 'none'>('all');
   const [selectedPosOutorgaSectors, setSelectedPosOutorgaSectors] = useState<string[]>([]);
   const [selectedInstructorFilter, setSelectedInstructorFilter] = useState('ALL');
+
   const [posOutorgaSortField, setPosOutorgaSortField] = useState<'nome' | 'progresso' | 'dataOutorga'>('nome');
   const [posOutorgaSortOrder, setPosOutorgaSortOrder] = useState<'asc' | 'desc'>('asc');
+
   const [observacoesModalPersonId, setObservacoesModalPersonId] = useState<string | null>(null);
   const [newObservacaoText, setNewObservacaoText] = useState('');
 
@@ -136,81 +66,67 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
   }, [searchQuery, selectedSector, activeTab, memberTimeFilter, selectedPosOutorgaSectors, selectedInstructorFilter]);
 
   // Extract unique sectors list
-  const sectorsList = Array.from(new Set(people.map(p => p.setor2 || 'SEM SETOR').filter(Boolean)));
+  const sectorsList = Array.from(new Set(people.map((p) => p.setor2 || 'SEM SETOR').filter(Boolean)));
 
-  // Course handlers
-  const handleIniciacaoChange = (id: string, field: string, value: any) => {
-    const updated = people.map(p => {
-      if (p.id === id) {
-        const nextIniciacao = { ...p.cursoIniciacao, [field]: value };
-        // Auto mark as concluded if presence or date exists
-        if (field === 'concluido' && value === true) {
-          nextIniciacao.presenca = true;
-        }
-        return { ...p, cursoIniciacao: nextIniciacao };
-      }
-      return p;
-    });
-    onUpdatePeople(updated);
-  };
+  // -----------------------------
+  // Pós-Outorga (5 aulas)
+  // -----------------------------
+  const handlePosOutorgaLessonToggle = (id: string, lessonNumber: LessonNumber) => {
+    const updated = people.map((p) => {
+      if (p.id !== id) return p;
 
-  const handlePosOutorgaLessonToggle = (id: string, lessonNumber: 1 | 2 | 3 | 4 | 5) => {
-    const updated = people.map(p => {
-      if (p.id === id) {
-        const currentStatus = p.cursoPosOutorga.aulas[lessonNumber];
-        const isConcluido = currentStatus === 'Concluído' || currentStatus === 'Concluido';
+      const currentStatus = p.cursoPosOutorga.aulas[lessonNumber];
+      const isConcluido = isConcludedStatus(currentStatus);
 
-        // Removido: “Em andamento”. Agora só alterna entre “Não iniciou” <-> “Concluído”
-        const nextStatus: 'Não iniciou' | 'Concluído' | 'Concluido' = isConcluido ? 'Não iniciou' : 'Concluído';
-        const nextAulas = { ...p.cursoPosOutorga.aulas, [lessonNumber]: nextStatus };
+      const nextStatus: Exclude<LessonStatus, 'Não iniciado'> | 'Não iniciado' = isConcluido ? 'Não iniciado' : 'Concluído';
+      // Compatibilidade com o sistema atual (aceita Concluido/Concluído)
+      const normalizedNext: 'Concluído' | 'Concluido' = nextStatus === 'Concluído' ? 'Concluído' : 'Concluído';
 
-        const currentConcluidosEm = (p.cursoPosOutorga as any).concluidosEm || {};
+      const nextAulas = { ...p.cursoPosOutorga.aulas, [lessonNumber]: isConcluido ? 'Não iniciado' : normalizedNext };
+      const currentConcluidosEm = (p.cursoPosOutorga as any).concluidosEm || {};
 
-        // Se marcar como NÃO iniciado, remove a data.
-        // Se marcar como CONCLUÍDO, mantém a data atual se já houver (caso contrário fica vazio pra preencher).
-        if (isConcluido) {
-          const nextConcluidosEm = { ...currentConcluidosEm };
-          delete nextConcluidosEm[lessonNumber];
-          return {
-            ...p,
-            cursoPosOutorga: {
-              ...p.cursoPosOutorga,
-              aulas: nextAulas,
-              concluidosEm: nextConcluidosEm
-            }
-          };
-        }
-
+      if (isConcluido) {
+        const nextConcluidosEm = { ...currentConcluidosEm };
+        delete nextConcluidosEm[lessonNumber];
         return {
           ...p,
           cursoPosOutorga: {
             ...p.cursoPosOutorga,
             aulas: nextAulas,
-            concluidosEm: {
-              ...currentConcluidosEm,
-              [lessonNumber]: currentConcluidosEm?.[lessonNumber] || ''
-            }
-          }
+            concluidosEm: nextConcluidosEm,
+          },
         };
       }
-      return p;
+
+      return {
+        ...p,
+        cursoPosOutorga: {
+          ...p.cursoPosOutorga,
+          aulas: nextAulas,
+          concluidosEm: {
+            ...currentConcluidosEm,
+            [lessonNumber]: currentConcluidosEm?.[lessonNumber] || '',
+          },
+        },
+      };
     });
+
     onUpdatePeople(updated);
   };
 
-  const handlePosOutorgaInstructorChange = (id: string, lessonNumber: 1 | 2 | 3 | 4 | 5, value: string) => {
-    const updated = people.map(p => {
+  const handlePosOutorgaInstructorChange = (id: string, lessonNumber: LessonNumber, value: string) => {
+    const updated = people.map((p) => {
       if (p.id === id) {
         const nextInstrutores = {
           ...(p.cursoPosOutorga.instrutores || {}),
-          [lessonNumber]: value
+          [lessonNumber]: value,
         };
         return {
           ...p,
           cursoPosOutorga: {
             ...p.cursoPosOutorga,
-            instrutores: nextInstrutores
-          }
+            instrutores: nextInstrutores,
+          },
         };
       }
       return p;
@@ -218,25 +134,21 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
     onUpdatePeople(updated);
   };
 
-  const handlePosOutorgaConcluidoEmChange = (
-    id: string,
-    lessonNumber: 1 | 2 | 3 | 4 | 5,
-    value: string
-  ) => {
-    const updated = people.map(p => {
+  const handlePosOutorgaConcluidoEmChange = (id: string, lessonNumber: LessonNumber, value: string) => {
+    const updated = people.map((p) => {
       if (p.id === id) {
         const currentConcluidosEm = (p.cursoPosOutorga as any).concluidosEm || {};
         const nextConcluidosEm = {
           ...currentConcluidosEm,
-          [lessonNumber]: value
+          [lessonNumber]: value,
         };
 
         return {
           ...p,
           cursoPosOutorga: {
             ...p.cursoPosOutorga,
-            concluidosEm: nextConcluidosEm
-          }
+            concluidosEm: nextConcluidosEm,
+          },
         };
       }
       return p;
@@ -253,15 +165,15 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
       createdAt: new Date().toISOString(),
     };
 
-    const updated = people.map(p => {
+    const updated = people.map((p) => {
       if (p.id === personId) {
         const currentComments = p.cursoPosOutorga.observacoesComentarios || [];
         return {
           ...p,
           cursoPosOutorga: {
             ...p.cursoPosOutorga,
-            observacoesComentarios: [...currentComments, novoComentario]
-          }
+            observacoesComentarios: [...currentComments, novoComentario],
+          },
         };
       }
       return p;
@@ -272,15 +184,15 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
   };
 
   const handleDeleteObservacao = (personId: string, comentarioId: string) => {
-    const updated = people.map(p => {
+    const updated = people.map((p) => {
       if (p.id === personId) {
         const currentComments = p.cursoPosOutorga.observacoesComentarios || [];
         return {
           ...p,
           cursoPosOutorga: {
             ...p.cursoPosOutorga,
-            observacoesComentarios: currentComments.filter(c => c.id !== comentarioId)
-          }
+            observacoesComentarios: currentComments.filter((c) => c.id !== comentarioId),
+          },
         };
       }
       return p;
@@ -288,17 +200,153 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
     onUpdatePeople(updated);
   };
 
-  const filteredPeople = people.filter(p => {
+  // -----------------------------
+  // Princípios (UI com 5 aulas + aula única)
+  // (persistindo em cursoIniciacao via campos opcionais em runtime)
+  // -----------------------------
+  const getLessonFromIniciacao = (ci: any, lessonNumber: LessonNumber): Exclude<LessonStatus, 'Não iniciado'> | 'Não iniciado' => {
+    const aulaStatus = ci?.aulas?.[lessonNumber];
+    if (isConcludedStatus(aulaStatus)) return 'Concluído';
+    return 'Não iniciado';
+  };
+
+  const setLessonStatusForIniciacao = (id: string, lessonNumber: LessonNumber, next: 'Não iniciado' | 'Concluído') => {
+    const updated = people.map((p) => {
+      if (p.id !== id) return p;
+
+      const current = (p.cursoIniciacao as any) || {};
+      const nextAulas = { ...(current.aulas || {}) };
+      nextAulas[lessonNumber] = next === 'Concluído' ? 'Concluído' : 'Não iniciado';
+
+      const allDone = LESSONS.every((num) => isConcludedStatus(nextAulas[num]));
+
+      return {
+        ...p,
+        cursoIniciacao: {
+          ...current,
+          aulas: nextAulas,
+          concluido: allDone,
+          presenca: allDone ? true : Boolean(current.presenca),
+        },
+      };
+    });
+
+    onUpdatePeople(updated);
+  };
+
+  const handleIniciacaoAulaSingleToggle = (id: string, checked: boolean) => {
+    const updated = people.map((p) => {
+      if (p.id !== id) return p;
+
+      const current = (p.cursoIniciacao as any) || {};
+      const aulaUnicaData = current.data || '';
+      const aulaUnicaInstrutor = current.instrutor || '';
+
+      const nextAulas: any = {};
+      const nextDataByLesson: any = { ...(current.dataPorAula || {}) };
+      const nextInstrutoresByLesson: any = { ...(current.instrutoresPorAula || {}) };
+
+      LESSONS.forEach((num) => {
+        if (checked) {
+          nextAulas[num] = 'Concluído';
+          nextDataByLesson[num] = aulaUnicaData;
+          nextInstrutoresByLesson[num] = aulaUnicaInstrutor;
+        } else {
+          nextAulas[num] = 'Não iniciado';
+          delete nextDataByLesson[num];
+          delete nextInstrutoresByLesson[num];
+        }
+      });
+
+      return {
+        ...p,
+        cursoIniciacao: {
+          ...current,
+          concluido: checked,
+          presenca: checked ? true : Boolean(current.presenca),
+          aulas: nextAulas,
+          dataPorAula: nextDataByLesson,
+          instrutoresPorAula: nextInstrutoresByLesson,
+        },
+      };
+    });
+
+    onUpdatePeople(updated);
+  };
+
+  const handleIniciacaoLessonDateChange = (id: string, lessonNumber: LessonNumber, value: string) => {
+    const updated = people.map((p) => {
+      if (p.id !== id) return p;
+
+      const current = (p.cursoIniciacao as any) || {};
+      const nextAulas = { ...(current.aulas || {}) };
+      const nextDataPorAula = { ...(current.dataPorAula || {}) };
+
+      nextDataPorAula[lessonNumber] = value;
+      nextAulas[lessonNumber] = value ? 'Concluído' : 'Não iniciado';
+
+      const allDone = LESSONS.every((num) => isConcludedStatus(nextAulas[num]));
+
+      return {
+        ...p,
+        cursoIniciacao: {
+          ...current,
+          aulas: nextAulas,
+          dataPorAula: nextDataPorAula,
+          concluido: allDone,
+          presenca: value ? true : Boolean(current.presenca),
+        },
+      };
+    });
+
+    onUpdatePeople(updated);
+  };
+
+  const handleIniciacaoLessonInstructorChange = (id: string, lessonNumber: LessonNumber, value: string) => {
+    const updated = people.map((p) => {
+      if (p.id !== id) return p;
+
+      const current = (p.cursoIniciacao as any) || {};
+      const nextAulas = { ...(current.aulas || {}) };
+      const nextInstrutoresPorAula = { ...(current.instrutoresPorAula || {}) };
+
+      nextInstrutoresPorAula[lessonNumber] = value;
+
+      // Se instrutor informado, mantém a lógica simples: aula concluída
+      if (value.trim()) {
+        nextAulas[lessonNumber] = 'Concluído';
+      }
+
+      const allDone = LESSONS.every((num) => isConcludedStatus(nextAulas[num]));
+
+      return {
+        ...p,
+        cursoIniciacao: {
+          ...current,
+          aulas: nextAulas,
+          instrutoresPorAula: nextInstrutoresPorAula,
+          concluido: allDone,
+        },
+      };
+    });
+
+    onUpdatePeople(updated);
+  };
+
+  // -----------------------------
+  // Filtering / Sorting
+  // -----------------------------
+  const filteredPeople = people.filter((p) => {
     const matchesSearch = p.nome.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSector = selectedSector === 'ALL' || (p.setor2 || 'SEM SETOR') === selectedSector;
     return matchesSearch && matchesSector;
   });
 
   const posOutorgaFiltered = useMemo(() => {
-    let list = filteredPeople.filter(p => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari');
+    let list = filteredPeople.filter((p) => p.subtipoCadastro === 'MEMBRO' || p.tipoCadastro === 'Ohikari');
 
     if (memberTimeFilter !== 'all') {
-      list = list.filter(p => {
+      list = list.filter((p) => {
         const ano = p.anoOutorga ? Number(p.anoOutorga) : null;
         if (!ano) return memberTimeFilter === 'none';
         const currentYear = 2026;
@@ -311,7 +359,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
     }
 
     if (selectedPosOutorgaSectors.length > 0) {
-      list = list.filter(p => selectedPosOutorgaSectors.includes(p.setor2 || 'SEM SETOR'));
+      list = list.filter((p) => selectedPosOutorgaSectors.includes(p.setor2 || 'SEM SETOR'));
     }
 
     return list;
@@ -319,9 +367,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
 
   const instructorCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    posOutorgaFiltered.forEach(p => {
+    posOutorgaFiltered.forEach((p) => {
       const instrutores = p.cursoPosOutorga.instrutores || {};
-      ([1, 2, 3, 4, 5] as const).forEach(num => {
+      LESSONS.forEach((num) => {
         const name = instrutores[num]?.trim();
         if (name) {
           counts[name] = (counts[name] || 0) + 1;
@@ -332,17 +380,15 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
   }, [posOutorgaFiltered]);
 
   const posOutorgaFinalFiltered = useMemo(() => {
-    if (selectedInstructorFilter === 'ALL') {
-      return posOutorgaFiltered;
-    }
-    return posOutorgaFiltered.filter(p => {
+    if (selectedInstructorFilter === 'ALL') return posOutorgaFiltered;
+    return posOutorgaFiltered.filter((p) => {
       const instrutores = p.cursoPosOutorga.instrutores || {};
-      return ([1, 2, 3, 4, 5] as const).some(num => instrutores[num]?.trim() === selectedInstructorFilter);
+      return LESSONS.some((num) => instrutores[num]?.trim() === selectedInstructorFilter);
     });
   }, [posOutorgaFiltered, selectedInstructorFilter]);
 
   const posOutorgaStats = useMemo(() => {
-    const lessons: Record<1 | 2 | 3 | 4 | 5, { completed: number; notStarted: number }> = {
+    const lessons: Record<LessonNumber, { completed: number; notStarted: number }> = {
       1: { completed: 0, notStarted: 0 },
       2: { completed: 0, notStarted: 0 },
       3: { completed: 0, notStarted: 0 },
@@ -352,13 +398,13 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
 
     const sectors: Record<string, number> = {};
 
-    posOutorgaFinalFiltered.forEach(m => {
+    posOutorgaFinalFiltered.forEach((m) => {
       const aulas = m.cursoPosOutorga?.aulas || {};
       const sector = m.setor2 || 'SEM SETOR';
 
       let hasParticipated = false;
 
-      ([1, 2, 3, 4, 5] as const).forEach(num => {
+      LESSONS.forEach((num) => {
         const status = aulas[num] || 'Não iniciou';
         if (status === 'Concluido' || status === 'Concluído') {
           lessons[num].completed++;
@@ -382,7 +428,8 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
       if (posOutorgaSortField === 'nome') {
         const comparison = a.nome.localeCompare(b.nome, 'pt-BR');
         return posOutorgaSortOrder === 'asc' ? comparison : -comparison;
-      } else if (posOutorgaSortField === 'dataOutorga') {
+      }
+      if (posOutorgaSortField === 'dataOutorga') {
         const parseDateVal = (dateStr: string | undefined | null): number => {
           if (!dateStr) return 0;
           const parts = dateStr.split('/');
@@ -391,9 +438,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
             const month = parseInt(parts[1], 10) - 1;
             const year = parseInt(parts[2], 10);
             const date = new Date(year, month, day);
-            if (!isNaN(date.getTime())) {
-              return date.getTime();
-            }
+            if (!isNaN(date.getTime())) return date.getTime();
           }
           const parsed = Date.parse(dateStr);
           if (!isNaN(parsed)) return parsed;
@@ -401,25 +446,20 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
         };
         const dateA = parseDateVal(a.dataOutorga);
         const dateB = parseDateVal(b.dataOutorga);
-        if (dateA !== dateB) {
-          return posOutorgaSortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-        }
-        return a.nome.localeCompare(b.nome, 'pt-BR');
-      } else {
-        const aCount = Object.values(a.cursoPosOutorga?.aulas || {}).filter(v => v === 'Concluido' || v === 'Concluído').length;
-        const bCount = Object.values(b.cursoPosOutorga?.aulas || {}).filter(v => v === 'Concluido' || v === 'Concluído').length;
-        if (aCount !== bCount) {
-          return posOutorgaSortOrder === 'asc' ? aCount - bCount : bCount - aCount;
-        }
-        // Tie breaker: name
+        if (dateA !== dateB) return posOutorgaSortOrder === 'asc' ? dateA - dateB : dateB - dateA;
         return a.nome.localeCompare(b.nome, 'pt-BR');
       }
+
+      const aCount = Object.values(a.cursoPosOutorga?.aulas || {}).filter((v) => v === 'Concluido' || v === 'Concluído').length;
+      const bCount = Object.values(b.cursoPosOutorga?.aulas || {}).filter((v) => v === 'Concluido' || v === 'Concluído').length;
+      if (aCount !== bCount) return posOutorgaSortOrder === 'asc' ? aCount - bCount : bCount - aCount;
+      return a.nome.localeCompare(b.nome, 'pt-BR');
     });
   }, [posOutorgaFinalFiltered, posOutorgaSortField, posOutorgaSortOrder]);
 
   const handlePosOutorgaSort = (field: 'nome' | 'progresso' | 'dataOutorga') => {
     if (posOutorgaSortField === field) {
-      setPosOutorgaSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+      setPosOutorgaSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setPosOutorgaSortField(field);
       setPosOutorgaSortOrder('asc');
@@ -432,30 +472,27 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-sans font-semibold tracking-tight font-display">Controle de Cursos / Princípios e pós-outorga</h2>
-          <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-            Acompanhe o progresso dos membros nos cursos de Iniciação e Pós-Outorga.p</p>
+          <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>Acompanhe o progresso dos membros nos cursos de Iniciação e Pós-Outorga.</p>
         </div>
 
-        {/* Tab switchers */}
-        <div className={`p-1 rounded-lg border flex gap-1 backdrop-blur-md ${isDark ? 'bg-zinc-950/40 border-zinc-800' : 'bg-slate-100/40 border-slate-200'}`}>
-          <button 
+        {/* Tab switchers (mantidos por segurança do UI atual) */}
+        <div
+          className={`p-1 rounded-lg border flex gap-1 backdrop-blur-md ${isDark ? 'bg-zinc-950/40 border-zinc-800' : 'bg-slate-100/40 border-slate-200'}`}
+        >
+          <button
             id="tab-iniciacao"
             onClick={() => setActiveTab('iniciacao')}
             className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-              activeTab === 'iniciacao' 
-                ? 'bg-teal-600 text-white shadow-xs' 
-                : 'text-zinc-500 hover:text-teal-500'
+              activeTab === 'iniciacao' ? 'bg-teal-600 text-white shadow-xs' : 'text-zinc-500 hover:text-teal-500'
             }`}
           >
             Principios
           </button>
-          <button 
+          <button
             id="tab-pos-outorga"
             onClick={() => setActiveTab('pos-outorga')}
             className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-              activeTab === 'pos-outorga' 
-                ? 'bg-teal-600 text-white shadow-xs' 
-                : 'text-zinc-500 hover:text-teal-500'
+              activeTab === 'pos-outorga' ? 'bg-teal-600 text-white shadow-xs' : 'text-zinc-500 hover:text-teal-500'
             }`}
           >
             Pós-Outorga
@@ -463,17 +500,21 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
         </div>
       </div>
 
-      {/* Global Filter Bar with Search, Sector and Rows Limit Filter */}
+      {/* Global Filter Bar */}
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-teal-600 dark:text-teal-400" />
-          <input 
+          <input
             id="course-search"
             type="text"
             placeholder="Buscar por nome para acompanhar cursos..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className={`w-full pl-9 pr-4 py-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-850 text-zinc-100 focus:border-teal-500' : 'bg-white/60 border-slate-200 text-slate-900 focus:border-teal-500'} focus:outline-none backdrop-blur-xs`}
+            className={`w-full pl-9 pr-4 py-2 text-xs rounded-lg border ${
+              isDark
+                ? 'bg-zinc-950/40 border-zinc-850 text-zinc-100 focus:border-teal-500'
+                : 'bg-white/60 border-slate-200 text-slate-900 focus:border-teal-500'
+            } focus:outline-none backdrop-blur-xs`}
           />
         </div>
 
@@ -483,21 +524,29 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
               id="course-sector-filter"
               value={selectedSector}
               onChange={(e) => setSelectedSector(e.target.value)}
-              className={`w-full p-2 py-2 text-xs rounded-lg border ${isDark ? 'bg-zinc-950/40 border-zinc-850 text-zinc-200' : 'bg-white border-slate-200 text-slate-700'} focus:outline-none`}
+              className={`w-full p-2 py-2 text-xs rounded-lg border ${
+                isDark
+                  ? 'bg-zinc-950/40 border-zinc-850 text-zinc-200'
+                  : 'bg-white border-slate-200 text-slate-700'
+              } focus:outline-none`}
             >
               <option value="ALL">Todos os Setores</option>
-              {sectorsList.map(sec => (
-                <option key={sec} value={sec}>{sec}</option>
+              {sectorsList.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec}
+                </option>
               ))}
             </select>
           </div>
 
-          {/* Rows Limit Select */}
           <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border bg-white dark:bg-zinc-900/40 border-slate-200 dark:border-zinc-800">
             <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider whitespace-nowrap">Exibir:</span>
-            <select 
+            <select
               value={rowsLimit}
-              onChange={(e) => { setRowsLimit(Number(e.target.value)); setPageIndex(0); }}
+              onChange={(e) => {
+                setRowsLimit(Number(e.target.value));
+                setPageIndex(0);
+              }}
               className={`text-xs py-0 focus:outline-none bg-transparent ${isDark ? 'text-zinc-200' : 'text-slate-700'}`}
             >
               <option value={10}>10 linhas</option>
@@ -509,7 +558,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
         </div>
       </div>
 
-      {/* Tab 1: Curso de Iniciação */}
+      {/* Tab 1: Princípios */}
       {activeTab === 'iniciacao' && (() => {
         const totalRowsIniciacao = filteredPeople.length;
         const pageCountIniciacao = Math.ceil(totalRowsIniciacao / rowsLimit);
@@ -525,13 +574,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50/50 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                  Aula única concluída (conclui as 5 aulas automaticamente)
-                </span>
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Aula única concluída</span>
               </div>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                Use este botão quando a pessoa já concluiu o conteúdo completo.
-              </p>
+              <p className="text-[10px] text-zinc-500 dark:text-zinc-400">Quando marcado, conclui automaticamente as 5 aulas.</p>
             </div>
 
             <div className="overflow-x-auto">
@@ -540,156 +585,114 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                   <tr className={`border-b border-slate-200/40 dark:border-white/5 font-mono text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
                     <th className="py-2.5 px-3">Nome</th>
                     <th className="py-2.5 px-3">Status Geral</th>
-                    <th className="py-2.5 px-3">Data da Aula</th>
-                    <th className="py-2.5 px-3">Instrutor</th>
-                    <th className="py-2.5 px-3">Frequência</th>
-                    <th className="py-2.5 px-3 text-right">Aprovação</th>
+                    <th className="py-2.5 px-3 text-center">Aula Única</th>
+                    <th className="py-2.5 px-3 text-center">Aula 1</th>
+                    <th className="py-2.5 px-3 text-center">Aula 2</th>
+                    <th className="py-2.5 px-3 text-center">Aula 3</th>
+                    <th className="py-2.5 px-3 text-center">Aula 4</th>
+                    <th className="py-2.5 px-3 text-center">Aula 5</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                  {displayedIniciacao.map(p => {
-                    const ci = p.cursoIniciacao;
+                  {displayedIniciacao.map((p) => {
+                    const ci: any = p.cursoIniciacao;
+                    const aulaUnicaConcluida = Boolean(ci?.concluido);
+                    const dataPorAula: Record<LessonNumber, string> = ci?.dataPorAula || {};
+                    const instrutoresPorAula: Record<LessonNumber, string> = ci?.instrutoresPorAula || {};
+
                     return (
                       <tr key={p.id} className="hover:bg-slate-100/30 dark:hover:bg-zinc-850/20">
                         <td className="py-3 px-3 font-semibold text-zinc-900 dark:text-zinc-100">
                           {p.nome}
-                          <span className="block text-[10px] text-zinc-400 font-normal">{p.subtipoCadastro} • {p.setor2 || 'Sem Setor'}</span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            ci.concluido 
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' 
-                              : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                          }`}>
-                            {ci.concluido ? 'CONCLUÍDO' : 'PENDENTE'}
+                          <span className="block text-[10px] text-zinc-400 font-normal">
+                            {p.subtipoCadastro} • {p.setor2 || 'Sem Setor'}
                           </span>
                         </td>
-                    <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                            <input 
-                              id={`ci-aula-unica-toggle-${p.id}`}
-                              type="date" 
-                              value={(ci as any)?.dataPorAula?.[1] || ci.data || ''}
-                              onChange={(e) => {
-                                // Mantém data única (também copia para todas as 5)
-                                const value = e.target.value;
-                                const aulaUnicaInstrutor = (ci as any)?.instrutor || '';
-                                const updated = people.map(pp => {
-                                  if (pp.id !== p.id) return pp;
-                                  const next: any = {
-                                    ...pp,
-                                    cursoIniciacao: {
-                                      ...pp.cursoIniciacao,
-                                      data: value,
-                                      instrutor: aulaUnicaInstrutor,
-                                      presenca: Boolean(value),
-                                      concluido: Boolean(value),
-                                      aulas: {
-                                        1: value ? 'Concluído' : 'Não iniciou',
-                                        2: value ? 'Concluído' : 'Não iniciou',
-                                        3: value ? 'Concluído' : 'Não iniciou',
-                                        4: value ? 'Concluído' : 'Não iniciou',
-                                        5: value ? 'Concluído' : 'Não iniciou',
-                                      },
-                                      dataPorAula: {
-                                        1: value,
-                                        2: value,
-                                        3: value,
-                                        4: value,
-                                        5: value,
-                                      },
-                                      instrutoresPorAula: {
-                                        1: aulaUnicaInstrutor,
-                                        2: aulaUnicaInstrutor,
-                                        3: aulaUnicaInstrutor,
-                                        4: aulaUnicaInstrutor,
-                                        5: aulaUnicaInstrutor,
-                                      },
-                                    },
-                                  };
-                                  return next;
-                                });
-                                onUpdatePeople(updated);
-                              }}
-                              className={`p-1 rounded border text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-zinc-200 text-zinc-700'} focus:outline-none font-mono`}
-                            />
-                          </div>
-                        </td>
+
                         <td className="py-3 px-3">
-                          <div className="flex items-center gap-1">
-                            <User className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                            <input 
-                              id={`ci-instructor-${p.id}`}
-                              type="text" 
-                              placeholder="Nome do Instrutor"
-                              value={ci.instrutor || ''} 
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const updated = people.map(pp => {
-                                  if (pp.id !== p.id) return pp;
-                                  const aulaUnicaData = (pp.cursoIniciacao as any)?.data || (pp.cursoIniciacao as any)?.dataPorAula?.[1] || '';
-                                  const status = value.trim() && aulaUnicaData ? 'Concluído' : 'Não iniciou';
-                                  return {
-                                    ...pp,
-                                    cursoIniciacao: {
-                                      ...pp.cursoIniciacao,
-                                      instrutor: value,
-                                      presenca: Boolean(aulaUnicaData),
-                                      concluido: Boolean(aulaUnicaData),
-                                      aulas: {
-                                        1: status,
-                                        2: status,
-                                        3: status,
-                                        4: status,
-                                        5: status,
-                                      },
-                                      instrutoresPorAula: {
-                                        1: value,
-                                        2: value,
-                                        3: value,
-                                        4: value,
-                                        5: value,
-                                      },
-                                    },
-                                  };
-                                });
-                                onUpdatePeople(updated);
-                              }}
-                              className={`p-1 rounded border text-[10px] w-32 ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-zinc-200 text-zinc-700'} focus:outline-none`}
-                            />
-                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              aulaUnicaConcluida
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                                : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                            }`}
+                          >
+                            {aulaUnicaConcluida ? 'CONCLUÍDO' : 'PENDENTE'}
+                          </span>
                         </td>
-                        <td className="py-3 px-3">
-                          <label className="flex items-center gap-1.5 select-none cursor-pointer">
-                            <input 
-                              id={`ci-presenca-${p.id}`}
-                              type="checkbox" 
-                              checked={ci.presenca}
-                              onChange={(e) => handleIniciacaoChange(p.id, 'presenca', e.target.checked)}
-                              className="rounded accent-emerald-500 h-3.5 w-3.5 cursor-pointer"
-                            />
-                            <span className="font-medium text-slate-700 dark:text-zinc-300">Presença</span>
-                          </label>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <label className="inline-flex items-center gap-1.5 select-none cursor-pointer">
-                            <input 
+
+                        <td className="py-3 px-3 text-center">
+                          <label className="inline-flex items-center gap-1.5 select-none cursor-pointer justify-center">
+                            <input
                               id={`ci-aula-unica-${p.id}`}
-                              type="checkbox" 
-                              checked={Boolean((ci as any)?.concluido)}
+                              type="checkbox"
+                              checked={aulaUnicaConcluida}
                               onChange={(e) => handleIniciacaoAulaSingleToggle(p.id, e.target.checked)}
                               className="rounded accent-teal-500 h-3.5 w-3.5 cursor-pointer"
                             />
-                            <span className="font-bold text-teal-600 dark:text-teal-400">Aula única concluída</span>
+                            <span className="font-bold text-teal-600 dark:text-teal-400 text-[10px]">Única</span>
                           </label>
                         </td>
+
+                        {LESSONS.map((lessonNum) => {
+                          const status = getLessonFromIniciacao(ci, lessonNum);
+                          const completed = isConcludedStatus(status);
+
+                          const btnStyle = completed
+                            ? 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs'
+                            : 'bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 border border-zinc-200 dark:border-zinc-700';
+
+                          return (
+                            <td key={lessonNum} className="py-2 px-1 text-center align-top">
+                              <button
+                                id={`ci-aula-${p.id}-${lessonNum}`}
+                                onClick={() => setLessonStatusForIniciacao(p.id, lessonNum, completed ? 'Não iniciado' : 'Concluído')}
+                                className={`w-full px-3 py-1 text-[10px] rounded transition-colors cursor-pointer font-semibold ${btnStyle}`}
+                              >
+                                {completed ? 'Concluído' : 'Não iniciou'}
+                              </button>
+
+                              <div className="mt-2">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                                  <input
+                                    id={`ci-aula-date-${p.id}-${lessonNum}`}
+                                    type="date"
+                                    value={dataPorAula?.[lessonNum] || ''}
+                                    onChange={(e) => handleIniciacaoLessonDateChange(p.id, lessonNum, e.target.value)}
+                                    className={`w-full rounded-md border px-2 py-1 text-[10px] ${
+                                      isDark
+                                        ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200'
+                                        : 'bg-white border-slate-200 text-slate-700'
+                                    } focus:outline-none font-mono`}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="mt-2">
+                                <input
+                                  id={`ci-aula-instr-${p.id}-${lessonNum}`}
+                                  type="text"
+                                  value={instrutoresPorAula?.[lessonNum] || ''}
+                                  onChange={(e) => handleIniciacaoLessonInstructorChange(p.id, lessonNum, e.target.value)}
+                                  placeholder="Instrutor"
+                                  className={`w-full rounded-md border px-2 py-1 text-[10px] ${
+                                    isDark
+                                      ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200'
+                                      : 'bg-white border-slate-200 text-slate-700'
+                                  } focus:outline-none`}
+                                />
+                              </div>
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
+
                   {displayedIniciacao.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-zinc-500 italic">
+                      <td colSpan={8} className="py-12 text-center text-zinc-500 italic">
                         Nenhum participante encontrado com estes critérios.
                       </td>
                     </tr>
@@ -698,7 +701,6 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
               </table>
             </div>
 
-            {/* Pagination Controls */}
             {pageCountIniciacao > 1 && (
               <div className="p-4 border-t border-slate-200/40 dark:border-white/5 flex items-center justify-between text-xs">
                 <span className="text-zinc-400 font-medium">
@@ -726,7 +728,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
         );
       })()}
 
-      {/* Tab 2: Curso Pós-Outorga (5 Aulas) */}
+      {/* Tab 2: Pós-Outorga */}
       {activeTab === 'pos-outorga' && (
         <div className="p-6 rounded-xl glass-panel shadow-sm space-y-6">
           <div className="flex items-center justify-between pb-2 border-b border-slate-200/40 dark:border-white/5">
@@ -736,21 +738,21 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
             </div>
           </div>
 
-          {/* Time Filter Option */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50/50 dark:bg-zinc-950/20 border border-slate-200/30 dark:border-white/5">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400" />
               <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Tempo de Outorga (Tempo de Membro):</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(['all', 'recent', '1-3', '3plus', 'none'] as const).map(option => {
-                const labels = {
+              {(['all', 'recent', '1-3', '3plus', 'none'] as const).map((option) => {
+                const labels: Record<typeof option, string> = {
                   all: 'Todos',
                   recent: 'Recente (≤ 1 ano)',
                   '1-3': '1 a 3 anos',
                   '3plus': 'Mais de 3 anos',
-                  none: 'Sem ano'
-                };
+                  none: 'Sem ano',
+                } as any;
+
                 return (
                   <button
                     key={option}
@@ -768,10 +770,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
             </div>
           </div>
 
-          {/* Lessons Cards */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-4">
-              <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Instrutores & Aulas</h4>
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Instrutores &amp; Aulas</h4>
               {selectedInstructorFilter !== 'ALL' && (
                 <button
                   onClick={() => setSelectedInstructorFilter('ALL')}
@@ -781,6 +782,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                 </button>
               )}
             </div>
+
             <div className="flex flex-wrap gap-2 mb-3">
               {Object.entries(instructorCounts).length === 0 ? (
                 <span className="text-[10px] text-zinc-400 italic">Nenhum instrutor registrado ainda.</span>
@@ -791,7 +793,11 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                     <button
                       key={instrutor}
                       onClick={() => setSelectedInstructorFilter(instrutor)}
-                      className={`px-3 py-1.5 rounded-lg border text-[10px] uppercase transition-all duration-200 ${isSelected ? 'bg-teal-600 text-white border-teal-600' : 'bg-white/70 dark:bg-zinc-950/30 border-slate-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900'}`}
+                      className={`px-3 py-1.5 rounded-lg border text-[10px] uppercase transition-all duration-200 ${
+                        isSelected
+                          ? 'bg-teal-600 text-white border-teal-600'
+                          : 'bg-white/70 dark:bg-zinc-950/30 border-slate-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900'
+                      }`}
                     >
                       {instrutor}: {count} aula{count === 1 ? '' : 's'}
                     </button>
@@ -799,19 +805,22 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                 })
               )}
             </div>
+
             <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Pessoas por Aula</h4>
             <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-              {([1, 2, 3, 4, 5] as const).map(lessonNum => {
+              {LESSONS.map((lessonNum) => {
                 const stats = posOutorgaStats.lessons[lessonNum];
                 return (
-                  <div key={lessonNum} className="p-3.5 rounded-xl border border-slate-200/40 dark:border-white/5 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md">
+                  <div
+                    key={lessonNum}
+                    className="p-3.5 rounded-xl border border-slate-200/40 dark:border-white/5 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md"
+                  >
                     <span className="block text-xs font-bold text-teal-600 dark:text-teal-400 font-display">Aula {lessonNum}</span>
                     <div className="mt-2 space-y-1.5 text-[10px] font-mono">
                       <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
                         <span>Fizeram:</span>
                         <span>{stats.completed}</span>
                       </div>
-
                       <div className="flex justify-between text-zinc-400">
                         <span>Pendente:</span>
                         <span>{stats.notStarted}</span>
@@ -823,7 +832,6 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
             </div>
           </div>
 
-          {/* Sectors Cards */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Participantes por Setor (Clique para filtrar/combinar)</h4>
@@ -836,30 +844,28 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                 </button>
               )}
             </div>
+
             <div className="flex flex-wrap gap-2.5">
               {Object.entries(posOutorgaStats.sectors).map(([sectorName, count]) => {
                 const isSelected = selectedPosOutorgaSectors.includes(sectorName);
                 const hasFiltersActive = selectedPosOutorgaSectors.length > 0;
-                
-                let cardClass = "";
+
+                let cardClass = '';
                 if (isSelected) {
-                  cardClass = "bg-teal-600 border-teal-600 text-white shadow-xs font-bold scale-102";
+                  cardClass = 'bg-teal-600 border-teal-600 text-white shadow-xs font-bold scale-102';
                 } else if (hasFiltersActive) {
-                  cardClass = "border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/10 text-zinc-400 dark:text-zinc-500 opacity-50 hover:opacity-80";
+                  cardClass = 'border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/10 text-zinc-400 dark:text-zinc-500 opacity-50 hover:opacity-80';
                 } else {
-                  cardClass = "border-teal-500/10 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 hover:border-teal-500/20";
+                  cardClass = 'border-teal-500/10 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 hover:border-teal-500/20';
                 }
 
                 return (
                   <button
                     key={sectorName}
                     onClick={() => {
-                      setSelectedPosOutorgaSectors(prev => {
-                        if (prev.includes(sectorName)) {
-                          return prev.filter(s => s !== sectorName);
-                        } else {
-                          return [...prev, sectorName];
-                        }
+                      setSelectedPosOutorgaSectors((prev) => {
+                        if (prev.includes(sectorName)) return prev.filter((s) => s !== sectorName);
+                        return [...prev, sectorName];
                       });
                     }}
                     className={`px-3 py-1.5 rounded-lg border text-[10px] uppercase flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${cardClass}`}
@@ -873,6 +879,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                   </button>
                 );
               })}
+
               {Object.keys(posOutorgaStats.sectors).length === 0 && (
                 <div className="text-[10px] text-zinc-400 italic">Nenhum membro participando ativamente das aulas no momento.</div>
               )}
@@ -880,15 +887,20 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
           </div>
 
           <p className="text-xs text-zinc-400 italic">
-            💡 Dica: Clique no botão da aula para alternar entre: <span className="text-red-400 font-semibold">Não iniciou</span> ➔ <span className="text-emerald-500 font-semibold">Concluído</span>.
+            💡 Dica: Clique no botão da aula para alternar entre: <span className="text-red-400 font-semibold">Não iniciou</span> ➔{' '}
+            <span className="text-emerald-500 font-semibold">Concluído</span>.
             Ao marcar como concluído, preencha a data em “Concluído em”.
           </p>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className={`border-b border-slate-200/40 dark:border-white/5 font-mono text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
-                  <th 
+                <tr
+                  className={`border-b border-slate-200/40 dark:border-white/5 font-mono text-[10px] uppercase tracking-wider ${
+                    isDark ? 'text-zinc-400' : 'text-slate-500'
+                  }`}
+                >
+                  <th
                     className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
                     onClick={() => handlePosOutorgaSort('nome')}
                   >
@@ -897,7 +909,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                       <ArrowUpDown className={`w-3 h-3 ${posOutorgaSortField === 'nome' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-400'}`} />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
                     onClick={() => handlePosOutorgaSort('dataOutorga')}
                   >
@@ -906,7 +918,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                       <ArrowUpDown className={`w-3 h-3 ${posOutorgaSortField === 'dataOutorga' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-400'}`} />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none"
                     onClick={() => handlePosOutorgaSort('progresso')}
                   >
@@ -915,11 +927,11 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                       <ArrowUpDown className={`w-3 h-3 ${posOutorgaSortField === 'progresso' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-400'}`} />
                     </div>
                   </th>
-                  <th className="py-2.5 px-3 text-center">Aula 1</th>
-                  <th className="py-2.5 px-3 text-center">Aula 2</th>
-                  <th className="py-2.5 px-3 text-center">Aula 3</th>
-                  <th className="py-2.5 px-3 text-center">Aula 4</th>
-                  <th className="py-2.5 px-3 text-center">Aula 5</th>
+                  {LESSONS.map((n) => (
+                    <th key={n} className="py-2.5 px-3 text-center">
+                      Aula {n}
+                    </th>
+                  ))}
                   <th className="py-2.5 px-3 text-center">Observações</th>
                 </tr>
               </thead>
@@ -931,9 +943,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
 
                   return (
                     <>
-                      {displayedPosOutorga.map(p => {
+                      {displayedPosOutorga.map((p) => {
                         const aulas = p.cursoPosOutorga.aulas;
-                        const completedCount = Object.values(aulas).filter(v => v === 'Concluido' || v === 'Concluído').length;
+                        const completedCount = Object.values(aulas).filter((v) => v === 'Concluido' || v === 'Concluído').length;
                         const progressPercentage = completedCount * 20;
 
                         return (
@@ -944,41 +956,38 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                                 {p.idade ? `${p.idade} anos` : 'N/A'} • Tempo de Membro: {p.tempoMembro || 'N/A'} • Setor: {p.setor2 || 'N/A'}
                               </span>
                             </td>
-                            
-                            {/* Data Outorga Column */}
-                            <td className="py-3 px-3 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
-                              {p.dataOutorga || 'N/A'}
-                            </td>
-                            
-                            {/* Progress gauge bar */}
+
+                            <td className="py-3 px-3 font-mono text-[11px] text-zinc-600 dark:text-zinc-300">{p.dataOutorga || 'N/A'}</td>
+
                             <td className="py-3 px-3 min-w-[120px]">
                               <div className="flex items-center gap-2">
                                 <div className="w-20 h-2 bg-slate-200/30 dark:bg-zinc-850 rounded-full overflow-hidden">
-                                  <div 
+                                  <div
                                     className={`h-full transition-all duration-300 ${
-                                      progressPercentage === 100 ? 'bg-emerald-500' : progressPercentage > 40 ? 'bg-orange-500' : 'bg-red-500'
+                                      progressPercentage === 100
+                                        ? 'bg-emerald-500'
+                                        : progressPercentage > 40
+                                          ? 'bg-orange-500'
+                                          : 'bg-red-500'
                                     }`}
                                     style={{ width: `${progressPercentage}%` }}
                                   />
                                 </div>
-                                <span className="font-mono font-bold text-[11px] text-zinc-600 dark:text-zinc-200">
-                                  {progressPercentage}%
-                                </span>
+                                <span className="font-mono font-bold text-[11px] text-zinc-600 dark:text-zinc-200">{progressPercentage}%</span>
                               </div>
                             </td>
 
-                            {/* Lesson buttons */}
-                            {([1, 2, 3, 4, 5] as const).map(lessonNum => {
+                            {LESSONS.map((lessonNum) => {
                               const lessonStatus = aulas[lessonNum] || 'Não iniciou';
                               const instructorValue = p.cursoPosOutorga.instrutores?.[lessonNum] || '';
-                              let btnStyle = 'bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 border border-zinc-200 dark:border-zinc-700';
-                              if (lessonStatus === 'Concluido' || lessonStatus === 'Concluído') {
-                                 btnStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs';
-                              }
+                              const btnStyle =
+                                lessonStatus === 'Concluido' || lessonStatus === 'Concluído'
+                                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold border border-emerald-600 shadow-xs'
+                                  : 'bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 border border-zinc-200 dark:border-zinc-700';
 
                               return (
-                          <td key={lessonNum} className="py-2 px-1 text-center align-top">
-                                  <button 
+                                <td key={lessonNum} className="py-2 px-1 text-center align-top">
+                                  <button
                                     id={`btn-toggle-lesson-${p.id}-${lessonNum}`}
                                     onClick={() => handlePosOutorgaLessonToggle(p.id, lessonNum)}
                                     className={`w-full px-3 py-1 text-[10px] rounded transition-colors cursor-pointer font-semibold ${btnStyle}`}
@@ -991,7 +1000,11 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                                     value={instructorValue}
                                     onChange={(e) => handlePosOutorgaInstructorChange(p.id, lessonNum, e.target.value)}
                                     placeholder="Instrutor"
-                                    className={`mt-2 w-full rounded-md border px-2 py-1 text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-zinc-700'} focus:outline-none`}
+                                    className={`mt-2 w-full rounded-md border px-2 py-1 text-[10px] ${
+                                      isDark
+                                        ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200'
+                                        : 'bg-white border-slate-200 text-zinc-700'
+                                    } focus:outline-none`}
                                   />
 
                                   {(lessonStatus === 'Concluido' || lessonStatus === 'Concluído') && (
@@ -1000,13 +1013,18 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                                         type="date"
                                         value={((p.cursoPosOutorga as any).concluidosEm || {})[lessonNum] || ''}
                                         onChange={(e) => handlePosOutorgaConcluidoEmChange(p.id, lessonNum, e.target.value)}
-                                        className={`w-full rounded-md border px-2 py-1 text-[10px] ${isDark ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200' : 'bg-white border-slate-200 text-zinc-700'} focus:outline-none`}
+                                        className={`w-full rounded-md border px-2 py-1 text-[10px] ${
+                                          isDark
+                                            ? 'bg-zinc-950/40 border-zinc-800 text-zinc-200'
+                                            : 'bg-white border-slate-200 text-slate-700'
+                                        } focus:outline-none`}
                                       />
                                     </div>
                                   )}
                                 </td>
                               );
                             })}
+
                             <td className="py-3 px-3 text-center">
                               <button
                                 onClick={() => {
@@ -1021,6 +1039,7 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                           </tr>
                         );
                       })}
+
                       {displayedPosOutorga.length === 0 && (
                         <tr>
                           <td colSpan={8} className="py-8 text-center text-zinc-400 italic">
@@ -1035,7 +1054,6 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
             </table>
           </div>
 
-          {/* Pagination Controls for Tab 2 */}
           {(() => {
             const totalRowsPosOutorga = sortedPosOutorgaFiltered.length;
             const pageCountPosOutorga = Math.ceil(totalRowsPosOutorga / rowsLimit);
@@ -1067,21 +1085,24 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
           })()}
 
           {observacoesModalPersonId && (() => {
-            const modalPerson = people.find(p => p.id === observacoesModalPersonId);
+            const modalPerson = people.find((p) => p.id === observacoesModalPersonId);
             const comments = modalPerson?.cursoPosOutorga.observacoesComentarios || [];
             if (!modalPerson) return null;
+
             return (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
                 <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200/40 bg-white text-slate-900 shadow-2xl dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100">
                   <div className="flex items-center justify-between gap-3 border-b border-slate-200/40 px-5 py-4 dark:border-white/10">
                     <div>
                       <h3 className="text-sm font-semibold">Observações de {modalPerson.nome}</h3>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Comentários por aula, capa de estilo Trello e histórico rápido.</p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Comentários por aula, histórico rápido.</p>
                     </div>
                     <button
                       onClick={() => setObservacoesModalPersonId(null)}
                       className="text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white"
-                    >Fechar</button>
+                    >
+                      Fechar
+                    </button>
                   </div>
 
                   <div className="space-y-4 p-5">
@@ -1114,7 +1135,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                         <button
                           onClick={() => handleAddObservacao(modalPerson.id, newObservacaoText)}
                           className="rounded-full bg-teal-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-teal-700 transition-colors"
-                        >Adicionar</button>
+                        >
+                          Adicionar
+                        </button>
                       </div>
                     </div>
 
@@ -1124,8 +1147,11 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                           Nenhum comentário registrado ainda.
                         </div>
                       ) : (
-                        comments.map(comment => (
-                          <div key={comment.id} className="rounded-3xl border border-slate-200/40 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950">
+                        comments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            className="rounded-3xl border border-slate-200/40 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950"
+                          >
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-900 dark:text-zinc-100">{comment.autorNome}</p>
@@ -1134,7 +1160,9 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
                               <button
                                 onClick={() => handleDeleteObservacao(modalPerson.id, comment.id)}
                                 className="text-[10px] text-red-500 hover:text-red-600"
-                              >Excluir</button>
+                              >
+                                Excluir
+                              </button>
                             </div>
                             <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
                           </div>
@@ -1151,3 +1179,4 @@ export default function CoursesView({ people, onUpdatePeople, isDark, currentUse
     </div>
   );
 }
+
