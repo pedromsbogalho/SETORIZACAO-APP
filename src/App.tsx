@@ -1509,6 +1509,7 @@ export default function App() {
                 currentUserRole={userRole}
                 currentAMName={userRole === 'AM' ? currentAMName : undefined}
                 structure={structure}
+                currentUserName={currentAppUser?.displayName || currentUser?.displayName || currentAppUser?.email || currentUser?.email || ''}
               />
             )}
 

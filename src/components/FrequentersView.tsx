@@ -21,6 +21,7 @@ interface FrequentersViewProps {
   currentUserRole: 'ADMIN' | 'AM';
   currentAMName?: string;
   structure: JohreiCenterStructure;
+  currentUserName?: string;
 }
 
 export default function FrequentersView({
@@ -29,7 +30,8 @@ export default function FrequentersView({
   isDark,
   currentUserRole,
   currentAMName,
-  structure
+  structure,
+  currentUserName
 }: FrequentersViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -42,11 +44,59 @@ export default function FrequentersView({
   const [csvText, setCsvText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // States for observations comments
+  const [observacoesModalPersonId, setObservacoesModalPersonId] = useState<string | null>(null);
+  const [newObservacaoText, setNewObservacaoText] = useState('');
+
+  const handleAddObservacao = (personId: string, texto: string) => {
+    if (!texto.trim()) return;
+    const novoComentario = {
+      id: `${personId}-${Date.now()}`,
+      texto: texto.trim(),
+      autorNome: currentUserName || 'Usuário',
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = people.map((p) => {
+      if (p.id === personId) {
+        const currentComments = p.cursoPosOutorga?.observacoesComentarios || [];
+        return {
+          ...p,
+          cursoPosOutorga: {
+            ...(p.cursoPosOutorga || { aulas: { 1: 'Não iniciou', 2: 'Não iniciou', 3: 'Não iniciou', 4: 'Não iniciou', 5: 'Não iniciou' } }),
+            observacoesComentarios: [...currentComments, novoComentario],
+          },
+        };
+      }
+      return p;
+    });
+
+    onUpdatePeople(updated);
+    setNewObservacaoText('');
+  };
+
+  const handleDeleteObservacao = (personId: string, comentarioId: string) => {
+    const updated = people.map((p) => {
+      if (p.id === personId) {
+        const currentComments = p.cursoPosOutorga?.observacoesComentarios || [];
+        return {
+          ...p,
+          cursoPosOutorga: {
+            ...(p.cursoPosOutorga || { aulas: { 1: 'Não iniciou', 2: 'Não iniciou', 3: 'Não iniciou', 4: 'Não iniciou', 5: 'Não iniciou' } }),
+            observacoesComentarios: currentComments.filter((c) => c.id !== comentarioId),
+          },
+        };
+      }
+      return p;
+    });
+    onUpdatePeople(updated);
+  };
+
   // Column resizing state (initial widths for columns)
   const [colWidths, setColWidths] = useState<Record<string, number>>({
     id: 110,
     nome: 240,
-    tipo: 100,
+    observacoes: 130,
     etapa: 200,
     setor: 180,
     bairro: 180,
@@ -658,16 +708,15 @@ export default function FrequentersView({
                   />
                 </th>
                 <th 
-                  onClick={() => handleSort('tipoCadastro')}
-                  className="relative py-3.5 px-4 font-bold cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors select-none group"
-                  style={{ width: colWidths.tipo, minWidth: colWidths.tipo }}
+                  className="relative py-3.5 px-4 font-bold select-none group text-center"
+                  style={{ width: colWidths.observacoes || 130, minWidth: colWidths.observacoes || 130 }}
                 >
-                  <div className="flex items-center gap-1">
-                    Tipo {sortField === 'tipoCadastro' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  <div className="flex items-center justify-center gap-1">
+                    Observações
                   </div>
                   <div 
                     onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => handleMouseDown(e, 'tipo')}
+                    onMouseDown={(e) => handleMouseDown(e, 'observacoes')}
                     className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-teal-500/50 bg-transparent transition-colors z-10"
                   />
                 </th>
@@ -765,8 +814,16 @@ export default function FrequentersView({
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-semibold text-teal-600 dark:text-teal-400">
-                      {person.tipoCadastro}
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => {
+                          setObservacoesModalPersonId(person.id);
+                          setNewObservacaoText('');
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      >
+                        Observações ({(person.cursoPosOutorga?.observacoesComentarios || []).length})
+                      </button>
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-medium text-zinc-800 dark:text-zinc-200">{person.jornadaEtapa}</div>
@@ -1076,6 +1133,98 @@ export default function FrequentersView({
           </div>
         </div>
       )}
+
+      {/* Observações Modal */}
+      {observacoesModalPersonId && (() => {
+        const modalPerson = people.find((p) => p.id === observacoesModalPersonId);
+        const comments = modalPerson?.cursoPosOutorga?.observacoesComentarios || [];
+        if (!modalPerson) return null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200/40 bg-white text-slate-900 shadow-2xl dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200/40 px-5 py-4 dark:border-white/10">
+                <div>
+                  <h3 className="text-sm font-semibold">Observações de {modalPerson.nome}</h3>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Comentários por aula, histórico rápido.</p>
+                </div>
+                <button
+                  onClick={() => setObservacoesModalPersonId(null)}
+                  className="text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <div className="space-y-4 p-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200/40 bg-slate-50 p-3 dark:border-white/10 dark:bg-zinc-900/60 font-mono">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Total</p>
+                    <p className="mt-3 text-2xl font-semibold">{comments.length}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200/40 bg-slate-50 p-3 dark:border-white/10 dark:bg-zinc-900/60">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono font-bold">Frequentador</p>
+                    <p className="mt-3 text-xs font-semibold truncate" title={modalPerson.nome}>{modalPerson.nome}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200/40 bg-slate-50 p-3 dark:border-white/10 dark:bg-zinc-900/60">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono font-bold">Setor</p>
+                    <p className="mt-3 text-xs font-semibold">{modalPerson.setor2 || 'Sem Setor'}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200/40 bg-slate-50 p-4 dark:border-white/10 dark:bg-zinc-900/70">
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500 font-mono font-bold">Novo comentário</h4>
+                  <textarea
+                    value={newObservacaoText}
+                    onChange={(e) => setNewObservacaoText(e.target.value)}
+                    rows={4}
+                    placeholder="Escreva uma observação sobre o frequentador..."
+                    className="mt-3 w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none transition-colors focus:border-teal-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+                  />
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono font-bold">Autor: {currentUserName || 'Usuário'}</span>
+                    <button
+                      onClick={() => handleAddObservacao(modalPerson.id, newObservacaoText)}
+                      className="rounded-full bg-teal-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-teal-700 transition-colors cursor-pointer"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {comments.length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-400">
+                      Nenhuma observação registrada ainda.
+                    </div>
+                  ) : (
+                    comments.map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="rounded-3xl border border-slate-200/40 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold text-slate-900 dark:text-zinc-100">{comment.autorNome}</p>
+                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">{new Date(comment.createdAt).toLocaleString('pt-BR')}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteObservacao(modalPerson.id, comment.id)}
+                            className="text-[10px] text-red-500 hover:text-red-600 cursor-pointer"
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-zinc-200 whitespace-pre-line">{comment.texto}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
