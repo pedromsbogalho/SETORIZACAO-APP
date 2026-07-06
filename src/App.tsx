@@ -72,6 +72,10 @@ export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
+  // Referências de controle para otimização e estabilização de sessões no Firebase
+  const dataLoadedRef = useRef<boolean>(false);
+  const activeUserIdRef = useRef<string | null>(null);
+
   // Theme fixa: removido toggle (mantemos tema light por simplicidade)
   const isDark = false;
 
@@ -365,12 +369,18 @@ export default function App() {
     let unsubscribeRealtime: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (unsubscribeRealtime) {
-        unsubscribeRealtime();
-        unsubscribeRealtime = null;
-      }
-
       if (user) {
+        // Se o usuário logado for exatamente o mesmo, não re-inicializamos a sessão e evitamos carregamentos redundantes
+        if (activeUserIdRef.current === user.uid) {
+          return;
+        }
+
+        if (unsubscribeRealtime) {
+          unsubscribeRealtime();
+          unsubscribeRealtime = null;
+        }
+
+        activeUserIdRef.current = user.uid;
         setCurrentUser(user);
         setIsLoading(true);
 
@@ -412,6 +422,7 @@ export default function App() {
             setStructure(DEFAULT_STRUCTURE);
           }
 
+          dataLoadedRef.current = true; // Marca como carregado no fallback offline
           setIsLoading(false);
           setAuthLoading(false);
         };
@@ -441,7 +452,14 @@ export default function App() {
                 setUserRole(latestAppUser.role);
 
                 if (latestAppUser.approved) {
-                  // Se aprovado, carrega os dados compartilhados
+                  // Otimização Crítica: Se os dados já foram carregados uma vez,
+                  // não precisamos buscar tudo de novo e piscar a tela toda de carregamento.
+                  if (dataLoadedRef.current) {
+                    setIsLoading(false);
+                    setAuthLoading(false);
+                    return;
+                  }
+
                   setIsLoading(true);
                   try {
                     const fbPeople = await fetchPeopleFromFirebase(user.uid);
@@ -479,6 +497,7 @@ export default function App() {
                         saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
                       }
                     }
+                    dataLoadedRef.current = true; // Sincronização inicial efetuada
                   } catch (error) {
                     console.error("Failed to load user database, falling back to LocalStorage:", error);
                     const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
@@ -491,6 +510,7 @@ export default function App() {
                     } else {
                       setStructure(DEFAULT_STRUCTURE);
                     }
+                    dataLoadedRef.current = true;
                   } finally {
                     setIsLoading(false);
                     setAuthLoading(false);
@@ -499,6 +519,7 @@ export default function App() {
                   // Se explicitamente não aprovado pelo administrador, limpa os dados em tela e aguarda aprovação
                   setPeople([]);
                   setStructure(DEFAULT_STRUCTURE);
+                  dataLoadedRef.current = false;
                   setIsLoading(false);
                   setAuthLoading(false);
                 }
@@ -511,6 +532,7 @@ export default function App() {
                 if (!hasLocalCache) {
                   setPeople([]);
                   setStructure(DEFAULT_STRUCTURE);
+                  dataLoadedRef.current = false;
                 }
                 setIsLoading(false);
                 setAuthLoading(false);
@@ -523,6 +545,8 @@ export default function App() {
           handleOfflineFallback(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
       } else {
+        activeUserIdRef.current = null;
+        dataLoadedRef.current = false;
         setCurrentUser(null);
         setCurrentAppUser(null);
         setPeople([]);
