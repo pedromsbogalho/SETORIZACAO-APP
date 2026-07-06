@@ -1016,6 +1016,14 @@ export default function App() {
   const noPhoneCount = people.filter(p => !p.celularPrincipal).length;
   const totalAlerts = missingPostOutorgaCount + noWhatsCount + familiesSemAFCount + noSectorCount + noPhoneCount;
 
+  const allNavItems = [
+    ...menuItems,
+    ...(currentAppUser?.role === 'ADMIN' ? [
+      { id: 'approvals', label: 'Controle de Acesso', icon: Shield },
+      { id: 'logs', label: 'Logs de Auditoria', icon: Activity }
+    ] : [])
+  ];
+
   // Loading screen during Firebase Auth initialization
   if (authLoading) {
     return (
@@ -1439,7 +1447,7 @@ export default function App() {
           </header>
 
           {/* Tab View switching workspace */}
-          <div className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
+          <div className="flex-1 p-4 pb-32 md:p-8 md:pb-16 overflow-y-auto max-w-7xl w-full mx-auto">
             {activeTab === 'dashboard' && (
               <DashboardView
                 people={people}
@@ -1568,6 +1576,44 @@ export default function App() {
             )}
           </div>
         </main>
+
+        {/* BOTTOM NAVIGATION BAR FOR MOBILE */}
+        {!isMobileSidebarOpen && (
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-t border-slate-200/60 dark:border-white/10 z-40 py-2.5 px-4 overflow-x-auto scrollbar-none flex items-center gap-2 -webkit-overflow-scrolling-touch shadow-lg">
+            {allNavItems.map(item => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  id={`bottom-nav-${item.id}`}
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                  }}
+                  className={`flex flex-col items-center justify-center flex-shrink-0 min-w-[76px] h-12 rounded-xl transition-all relative cursor-pointer ${
+                    isActive
+                      ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 font-bold'
+                      : `${isDark ? 'text-zinc-400 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-100'}`
+                  }`}
+                >
+                  <div className="relative">
+                    <Icon className="w-4.5 h-4.5" />
+                    {'alertCount' in item && item.alertCount && totalAlerts > 0 && (
+                      <span className="absolute -top-1.5 -right-2 px-1.5 py-0.2 bg-orange-500 text-white rounded-full font-mono text-[8px] font-bold">
+                        {totalAlerts}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[9px] font-semibold mt-1 tracking-tight truncate max-w-[72px]">
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+            {/* Safe spacing spacer at the end */}
+            <div className="w-4 flex-shrink-0"></div>
+          </div>
+        )}
       </div>
 
       {/* Custom Confirmation Modal for Database Reset */}

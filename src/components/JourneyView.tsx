@@ -388,17 +388,19 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
               </div>
 
               {/* Date picker for adding timestamps */}
-              <div className="flex items-center gap-1.5 bg-white/40 dark:bg-zinc-950/40 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/10 backdrop-blur-xs">
-                <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Data conquista:</span>
-                <input
-                  id="journey-date-picker"
-                  type="date"
-                  value={customDate}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                  className="text-xxs font-mono bg-transparent text-slate-700 dark:text-zinc-200 outline-none"
-                />
-              </div>
+              {activeTab !== 'MEMBRO' && (
+                <div className="flex items-center gap-1.5 bg-white/40 dark:bg-zinc-950/40 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/10 backdrop-blur-xs">
+                  <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Data conquista:</span>
+                  <input
+                    id="journey-date-picker"
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className="text-xxs font-mono bg-transparent text-slate-700 dark:text-zinc-200 outline-none"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Toggle to switch between FREQUENTADOR and MEMBRO journey */}
