@@ -60,6 +60,22 @@ Campos que você pode alterar dependendo do pedido:
 - 'dataOutorga' (string, ex: '15/05/2023')
 - 'anoOutorga' (number ou string, ex: 2023)
 - 'jornadaEtapa' (ex: 'Primeiro atendimento', 'Recebe Johrei', 'Curso de Iniciação', 'Ingressa', 'Recebe Ohikari', 'Curso Pós-Outorga', 'Conclui Pós-Outorga', 'Torna-se membro ativo')
+- 'cursoIniciacao': objeto contendo informações do Curso de Princípios / Iniciação. Exemplo de estrutura:
+  "cursoIniciacao": {
+    "concluido": true,
+    "presenca": true,
+    "aulas": {
+      "1": "Concluído",
+      "2": "Concluído",
+      "3": "Concluído",
+      "4": "Concluído",
+      "5": "Concluído"
+    }
+  }
+  ATENÇÃO: Desmarcar o checkbox de Aula Única (ou desmarcar todas as aulas do curso de princípios) significa definir:
+  "concluido": false, "presenca": false, "aulas": { "1": "Não iniciado", "2": "Não iniciado", "3": "Não iniciado", "4": "Não iniciado", "5": "Não iniciado" }
+  Marcar o checkbox de Aula Única (ou concluir todas as aulas do curso de princípios) significa definir:
+  "concluido": true, "presenca": true, "aulas": { "1": "Concluído", "2": "Concluído", "3": "Concluído", "4": "Concluído", "5": "Concluído" }
 - 'cursoPosOutorga': objeto contendo as aulas de 1 a 5. Exemplo de estrutura:
   "cursoPosOutorga": {
     "aulas": {
@@ -108,6 +124,7 @@ ATENÇÃO ÀS REGRAS:
                 idade: p.idade,
                 tempoMembro: p.tempoMembro,
                 jornadaEtapa: p.jornadaEtapa,
+                cursoIniciacao: p.cursoIniciacao,
                 cursoPosOutorga: p.cursoPosOutorga,
                 am: p.am,
                 af2: p.af2,

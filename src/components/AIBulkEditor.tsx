@@ -179,6 +179,23 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
             };
           }
 
+          // Handle special deep object nested fields for cursoIniciacao safely
+          if (updateObj.updates.cursoIniciacao) {
+            const existingCI: any = p.cursoIniciacao || {};
+            const incomingCI: any = updateObj.updates.cursoIniciacao || {};
+
+            merged.cursoIniciacao = {
+              ...existingCI,
+              ...incomingCI,
+              aulas: {
+                ...(existingCI.aulas || {}),
+                ...(incomingCI.aulas || {})
+              },
+              dataPorAula: incomingCI.concluido === false ? {} : { ...(existingCI.dataPorAula || {}), ...(incomingCI.dataPorAula || {}) },
+              instrutoresPorAula: incomingCI.concluido === false ? {} : { ...(existingCI.instrutoresPorAula || {}), ...(incomingCI.instrutoresPorAula || {}) }
+            };
+          }
+
           return merged;
         }
         return p;
