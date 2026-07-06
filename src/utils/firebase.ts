@@ -414,7 +414,8 @@ export function onAppUserChangeRealtime(uid: string, callback: (user: AppUser | 
     }
   }, (err) => {
     console.error(`Error in onAppUserChangeRealtime for ${uid}:`, err);
-    callback(null);
+    // IMPORTANTE: Não chamamos callback(null) aqui para evitar que oscilações temporárias
+    // ou erros de rede do Firestore limpem a sessão do usuário e causem um flash de tela vazia.
   });
 }
 
@@ -496,5 +497,3 @@ export async function fetchActionLogsFromFirebase(): Promise<ActionLog[]> {
     return [];
   }
 }
-
-

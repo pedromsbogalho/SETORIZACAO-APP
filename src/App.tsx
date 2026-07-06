@@ -496,16 +496,22 @@ export default function App() {
                     setAuthLoading(false);
                   }
                 } else {
-                  // Se não aprovado, limpa os dados em tela e aguarda aprovação
+                  // Se explicitamente não aprovado pelo administrador, limpa os dados em tela e aguarda aprovação
                   setPeople([]);
                   setStructure(DEFAULT_STRUCTURE);
                   setIsLoading(false);
                   setAuthLoading(false);
                 }
               } else {
+                // Se latestAppUser for null (ex: oscilação de rede ou erro temporário do snapshot):
+                // Só limpamos se o usuário realmente não tiver nenhum dado em cache local,
+                // evitando "sumir" com os dados de quem já estava navegando normalmente.
                 setCurrentAppUser(null);
-                setPeople([]);
-                setStructure(DEFAULT_STRUCTURE);
+                const hasLocalCache = localStorage.getItem('jc_people_shared') || localStorage.getItem('jc_people');
+                if (!hasLocalCache) {
+                  setPeople([]);
+                  setStructure(DEFAULT_STRUCTURE);
+                }
                 setIsLoading(false);
                 setAuthLoading(false);
               }
