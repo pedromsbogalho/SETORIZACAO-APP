@@ -264,22 +264,23 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
   }, [activeTab]);
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 font-sans flex flex-col items-end">
-      {/* Floating Sparkles Button */}
+    <div className="font-sans">
+      {/* Floating Sparkles Button (Collapsible Tab on the right edge) */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all cursor-pointer font-semibold text-xs border border-teal-500/20"
+          className="fixed right-0 bottom-28 md:bottom-24 z-50 flex flex-col items-center justify-center w-10 h-16 bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-700 hover:from-teal-500 hover:to-emerald-600 text-white rounded-l-2xl shadow-2xl hover:scale-105 transition-all cursor-pointer border-y border-l border-teal-400/20 group"
           id="btn-ai-bulk-editor"
+          title="Assistente IA • Edição em Massa"
         >
-          <Sparkles className="w-4 h-4 animate-pulse" />
-          <span>Assistente IA • Edição em Massa</span>
+          <Sparkles className="w-4.5 h-4.5 animate-pulse text-teal-200 group-hover:scale-110 transition-transform" />
+          <span className="text-[8px] font-bold tracking-widest font-mono text-teal-100 uppercase mt-1 leading-none">IA</span>
         </button>
       )}
 
       {/* Expandable Interactive Assistant Box */}
       {isOpen && (
-        <div className={`w-80 sm:w-96 rounded-2xl border shadow-2xl overflow-hidden transition-all duration-300 animate-fade-in ${
+        <div className={`fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 rounded-2xl border shadow-2xl overflow-hidden transition-all duration-300 animate-fade-in md:bottom-6 md:right-6 z-50 ${
           isDark 
             ? 'bg-zinc-900 border-zinc-800 text-zinc-100' 
             : 'bg-white border-slate-200 text-slate-800'
