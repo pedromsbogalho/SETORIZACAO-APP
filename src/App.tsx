@@ -293,6 +293,11 @@ export default function App() {
         ...(existing.cursoPosOutorga.instrutores || {}),
         ...(incoming.cursoPosOutorga?.instrutores || {})
       },
+      // FIX: preservar as datas de conclusão das aulas (antes eram descartadas na mesclagem)
+      concluidosEm: {
+        ...(existing.cursoPosOutorga.concluidosEm || {}),
+        ...(incoming.cursoPosOutorga?.concluidosEm || {})
+      },
       observacoesComentarios: existing.cursoPosOutorga?.observacoesComentarios?.length
         ? existing.cursoPosOutorga.observacoesComentarios
         : incoming.cursoPosOutorga?.observacoesComentarios
@@ -792,20 +797,50 @@ export default function App() {
     const details = changes.length > 0 ? changes.join('; ') : 'Alterou posições ou ordens na estrutura';
 
     // Atualiza structure e imediatamente re-normaliza o campo dos membros para refletir o organograma.
-    const nextPeople = people.map(p => {
-      const setor = (p.setor2 || '').toUpperCase();
-      const matchingAM = newStructure.amList.find(am => am.sector.toUpperCase() === setor);
-      const matchingAFs = newStructure.afList.filter(af => af.sector.toUpperCase() === setor);
+    // Normalização de nomes (sem acentos/espaços) para evitar deslistas por diferenças de acentuação (ex: "CLELIA" vs "Clelia").
+    const normalizeName = (name: string): string =>
+      (name || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/\s+/g, ' ')
+        .trim();
 
-      const keepAM = matchingAM && p.am && p.am.toUpperCase() === matchingAM.name.toUpperCase();
-      const keepAF = matchingAFs.some(af => p.af2 && p.af2.toUpperCase() === af.name.toUpperCase());
-
-      return {
-        ...p,
-        am: keepAM ? p.am : '',
-        af2: keepAF ? p.af2 : ''
-      };
+    const amNamesBySector = new Map<string, Set<string>>();
+    newStructure.amList.forEach(am => {
+      const key = normalizeName(am.sector);
+      if (!amNamesBySector.has(key)) amNamesBySector.set(key, new Set());
+      amNamesBySector.get(key)!.add(normalizeName(am.name));
     });
+    const afNamesBySector = new Map<string, Set<string>>();
+    newStructure.afList.forEach(af => {
+      const key = normalizeName(af.sector);
+      if (!afNamesBySector.has(key)) afNamesBySector.set(key, new Set());
+      afNamesBySector.get(key)!.add(normalizeName(af.name));
+    });
+
+    // Guarda referência do estado anterior para sincronizar no Firestore apenas quem mudou.
+    const previousPeopleMap = new Map<string, Person>(people.map(p => [p.id, p]));
+
+    const nextPeople = people.map(p => {
+      const sectorKey = normalizeName(p.setor2);
+      const amSet = amNamesBySector.get(sectorKey);
+      const afSet = afNamesBySector.get(sectorKey);
+
+      const keepAM = !!(amSet && p.am && amSet.has(normalizeName(p.am)));
+      const keepAF = !!(afSet && p.af2 && afSet.has(normalizeName(p.af2)));
+
+      const newAm = keepAM ? p.am : '';
+      const newAf2 = keepAF ? p.af2 : '';
+
+      if (newAm === p.am && newAf2 === p.af2) {
+        return p; // Sem mudança: mantém a mesma referência (evita regravar no Firebase)
+      }
+
+      return { ...p, am: newAm, af2: newAf2 };
+    });
+
+    const changedPeople = nextPeople.filter(p => previousPeopleMap.get(p.id) !== p);
 
     const enriched = cleanSanitizeAndEnrichPeople(nextPeople);
     setPeople(enriched);
@@ -830,12 +865,15 @@ export default function App() {
       throw err; // Repassa para que a UI mostre erro se falhar
     }
 
-    // Salva os membros em lote em segundo plano (pode ser lento)
-    try {
-      await savePeopleBatchToFirebase(currentUser.uid, enriched);
-      console.log("Membros atualizados sincronizados com sucesso no Firebase.");
-    } catch (err) {
-      console.error("Erro ao sincronizar membros re-normalizados no Firebase:", err);
+    // OTIMIZAÇÃO DE COTA: grava apenas os membros cujos campos AM/AF mudaram,
+    // em vez de regravar toda a base (centenas de registros) a cada alteração da estrutura.
+    if (changedPeople.length > 0) {
+      try {
+        await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
+        console.log(`[Estrutura] ${changedPeople.length} membros re-normalizados sincronizados no Firebase.`);
+      } catch (err) {
+        console.error("Erro ao sincronizar membros re-normalizados no Firebase:", err);
+      }
     }
   };
 
@@ -854,17 +892,14 @@ export default function App() {
     }
   };
 
-  // Handle onboarding manual CSV import
-  const handleOnboardingImport = async () => {
+  // Handler unificado de importação de CSV (usado por colar, arrastar-e-soltar e upload de arquivo).
+  // Antes havia 3 cópias dessa lógica — qualquer correção precisava ser feita 3 vezes.
+  const processCsvImport = async (csvText: string, viaLabel: string) => {
     if (!currentUser) return;
     try {
-      if (!onboardingCSV.trim()) {
-        setOnboardingError('Cole ou faça o upload de um arquivo CSV válido.');
-        return;
-      }
-      const parsed = parseCSV(onboardingCSV);
+      const parsed = parseCSV(csvText);
       if (parsed.length === 0) {
-        setOnboardingError('Nenhum dado válido encontrado.');
+        setOnboardingError('Nenhum registro válido encontrado no CSV.');
         return;
       }
       const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
@@ -881,16 +916,26 @@ export default function App() {
           currentUser.email || '',
           currentAppUser?.displayName,
           'IMPORTAR_BASE',
-          `Importou uma base de ${merged.length} registros via CSV.`,
+          `Importou uma base de ${merged.length} registros via ${viaLabel}.`,
         );
-        alert(`${merged.length} registros cadastrados e salvos na nuvem com sucesso!`);
+        alert(`${merged.length} registros importados e salvos na nuvem com sucesso!`);
       } catch (err) {
         console.error("Error syncing imported CSV to Firebase:", err);
-        alert(`${enriched.length} registros cadastrados localmente (erro ao salvar na nuvem).`);
+        alert(`${enriched.length} registros importados localmente (erro ao salvar na nuvem).`);
       }
-    } catch (e: any) {
-      setOnboardingError(`Erro: ${e.message}`);
+    } catch (err: any) {
+      setOnboardingError(`Erro ao ler CSV: ${err.message}`);
     }
+  };
+
+  // Handle onboarding manual CSV import
+  const handleOnboardingImport = async () => {
+    if (!currentUser) return;
+    if (!onboardingCSV.trim()) {
+      setOnboardingError('Cole ou faça o upload de um arquivo CSV válido.');
+      return;
+    }
+    await processCsvImport(onboardingCSV, 'editor manual');
   };
 
   // Drag & Drop Handlers for Onboarding
@@ -911,40 +956,11 @@ export default function App() {
     if (file) {
       if (file.name.endsWith('.csv') || file.type === 'text/csv') {
         const reader = new FileReader();
-        reader.onload = async (evt) => {
+        reader.onload = (evt) => {
           const text = evt.target?.result as string;
           setOnboardingCSV(text);
-          // Auto import on drop to streamline experience
-          try {
-            const parsed = parseCSV(text);
-            if (parsed.length > 0) {
-              const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
-              const merged = mergeImportedPeople(people, enriched);
-              setPeople(merged);
-              localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(merged));
-              localStorage.setItem('jc_people_shared', JSON.stringify(merged));
-              setOnboardingError('');
-              setOnboardingCSV('');
-              try {
-                await savePeopleBatchToFirebase(currentUser.uid, merged);
-                await logActionToFirebase(
-                  currentUser.uid,
-                  currentUser.email || '',
-                  currentAppUser?.displayName,
-                  'IMPORTAR_BASE',
-                  `Importou uma base de ${merged.length} registros via arrastar e soltar.`,
-                );
-                alert(`${merged.length} registros importados e salvos na nuvem com sucesso via arrastar e soltar!`);
-              } catch (err) {
-                console.error("Error syncing dropped CSV to Firebase:", err);
-                alert(`${enriched.length} registros importados localmente (erro ao sincronizar na nuvem).`);
-              }
-            } else {
-              setOnboardingError('Nenhum registro válido encontrado no CSV.');
-            }
-          } catch (err: any) {
-            setOnboardingError(`Erro ao ler CSV: ${err.message}`);
-          }
+          // Auto import on drop to streamline experience (fluxo unificado)
+          void processCsvImport(text, 'arrastar e soltar');
         };
         reader.readAsText(file);
       } else {
@@ -959,39 +975,11 @@ export default function App() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (evt) => {
+    reader.onload = (evt) => {
       const text = evt.target?.result as string;
+      // Reaproveita o mesmo fluxo unificado do arrastar-e-soltar (evita 3 cópias divergentes da lógica)
       setOnboardingCSV(text);
-      try {
-        const parsed = parseCSV(text);
-        if (parsed.length > 0) {
-          const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
-          const merged = mergeImportedPeople(people, enriched);
-          setPeople(merged);
-          localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(merged));
-          localStorage.setItem('jc_people_shared', JSON.stringify(merged));
-          setOnboardingError('');
-          setOnboardingCSV('');
-          try {
-            await savePeopleBatchToFirebase(currentUser.uid, merged);
-            await logActionToFirebase(
-              currentUser.uid,
-              currentUser.email || '',
-              currentAppUser?.displayName,
-              'IMPORTAR_BASE',
-              `Importou uma base de ${merged.length} registros via upload de arquivo CSV.`,
-            );
-            alert(`${merged.length} registros importados e salvos na nuvem com sucesso!`);
-          } catch (err) {
-            console.error("Error syncing uploaded CSV to Firebase:", err);
-            alert(`${enriched.length} registros salvos localmente (erro ao salvar na nuvem).`);
-          }
-        } else {
-          setOnboardingError('Nenhum registro válido encontrado no CSV.');
-        }
-      } catch (err: any) {
-        setOnboardingError(`Erro ao ler CSV: ${err.message}`);
-      }
+      void processCsvImport(text, 'upload de arquivo CSV');
     };
     reader.readAsText(file);
   };
@@ -1003,7 +991,14 @@ export default function App() {
   const confirmResetDatabase = async () => {
     if (!currentUser) return;
     setPeople([]);
+    // FIX: limpa TODOS os caches locais relacionados (antes deixava 'jc_people_shared',
+    // 'jc_structure_shared' e 'jc_families_shared' órfãos, e o app ressucitava dados "apagados").
     localStorage.removeItem(`jc_people_${currentUser.uid}`);
+    localStorage.removeItem('jc_people_shared');
+    localStorage.removeItem('jc_people');
+    localStorage.removeItem('jc_structure_shared');
+    localStorage.removeItem('jc_structure');
+    localStorage.removeItem('jc_families_shared');
     setOnboardingCSV('');
     setOnboardingError('');
     setShowResetModal(false);
@@ -1035,9 +1030,18 @@ export default function App() {
   // Reinforce: theme fixa (isDark sempre false), remover import e componentes se não usados.
 
   // Calculate total alerts to display inside badge
-
-  const missingPostOutorgaCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.tipoCadastro === 'Ohikari' && !Object.values(p.cursoPosOutorga.aulas).every(v => v === 'Concluido')).length;
-  const noWhatsCount = people.filter(p => p.subtipoCadastro === 'MEMBRO' && p.jornadaEtapa !== 'Primeiro atendimento' && !p.gruposWhats.grupoSetor && !p.gruposWhats.grupoGeral).length;
+  // FIX: guards de segurança — registros antigos podem não ter cursoPosOutorga/aulas/gruposWhats
+  // populados no Firestore; sem o guard, a tela inteira quebra (Cannot read properties of undefined).
+  const missingPostOutorgaCount = people.filter(p =>
+    p.subtipoCadastro === 'MEMBRO' &&
+    p.tipoCadastro === 'Ohikari' &&
+    !(p.cursoPosOutorga?.aulas && Object.values(p.cursoPosOutorga.aulas).every(v => v === 'Concluido'))
+  ).length;
+  const noWhatsCount = people.filter(p =>
+    p.subtipoCadastro === 'MEMBRO' &&
+    p.jornadaEtapa !== 'Primeiro atendimento' &&
+    !(p.gruposWhats?.grupoSetor || p.gruposWhats?.grupoGeral)
+  ).length;
 
   // Families sem Assistente de Família (AF) definido
   const familiesSemAFCount = families.filter(f => !f.afResponsavel).length;
@@ -1344,7 +1348,7 @@ export default function App() {
             {/* Header / Logo */}
             <div className="p-4 border-b border-slate-200/40 dark:border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <span className="p-1.5 bg-teal-00 rounded-lg text-white font-bold shadow-xs">
+                <span className="p-1.5 bg-teal-600 rounded-lg text-white font-bold shadow-xs">
                   <img src="/faviconimmb.png" alt="Logo" className="w-5 h-5 object-contain" /> {/*substituindo landmark*/}
                 </span>
                 {!isSidebarCollapsed && (

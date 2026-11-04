@@ -13,7 +13,8 @@ Aplicar mudanças pedidas pelo usuário no projeto SETORIZACAO-APP.
 
 - [x] Quando apagar um responsável (AM) da Estrutura JC, também atualizar/aplicar impacto nos membros relacionados.
 
-- [ ] Rodar `npm run build` e `npm run dev` (ou `npm run lint`) para validar.
+- [x] Rodar `npm run build` e `npm run dev` (ou `npm run lint`) para validar.
+- [x] Mostrar o setor no card da pessoa na lista de aniversariantes (já implementado — badge + linha "Setor:")
 
 ## Notas
 - O VSCode está sem `ripgrep`, então inspeção/edição deve ser feita lendo arquivos específicos.
