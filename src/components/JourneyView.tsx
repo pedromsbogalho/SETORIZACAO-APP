@@ -212,6 +212,47 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
     }
   };
 
+  // ---- Foto da pessoa (Base64 no Firestore, sem Firebase Storage / plano Blaze) ----
+  const fotoInputRef = React.useRef<HTMLInputElement>(null);
+  const [fotoError, setFotoError] = useState('');
+
+  const handleFotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setFotoError('');
+    if (!file || !selectedPerson) return;
+    if (!file.type.startsWith('image/')) {
+      setFotoError('Selecione um arquivo de imagem.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        // Redimensiona p/ 128x128 (mantém proporção) e comprime em JPEG ~ reduz para poucos KB
+        const size = 128;
+        const scale = Math.min(size / img.width, size / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        if (dataUrl.length > 300000) {
+          setFotoError('Imagem muito grande. Tente outra menor.');
+          return;
+        }
+        onUpdatePeople(people.map(p => p.id === selectedPerson.id ? { ...p, fotoUrl: dataUrl } : p));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const handleRemoverFoto = () => {
+    if (!selectedPerson) return;
+    onUpdatePeople(people.map(p => p.id === selectedPerson.id ? { ...p, fotoUrl: '' } : p));
+  };
+
   const handleToggleStep = (step: JornadaEtapa, completed: boolean) => {
     if (!selectedPerson) return;
 
@@ -373,10 +414,47 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
           <div className="p-6 rounded-xl glass-panel md:col-span-2 shadow-sm space-y-6">
             {/* Header selection card */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-200/40 dark:border-white/5 gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-full bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400">
-                  <User className="w-6 h-6" />
-                </div>
+              <div className="flex items-center gap-3 relative">
+                {selectedPerson.fotoUrl ? (
+                  <div className="relative group">
+                    <img
+                      src={selectedPerson.fotoUrl}
+                      alt={selectedPerson.nome}
+                      className="w-14 h-14 rounded-full object-cover border-2 border-teal-500/60 shadow-sm"
+                    />
+                    <button
+                      onClick={handleRemoverFoto}
+                      title="Remover foto"
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center shadow hover:bg-red-600 cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fotoInputRef.current?.click()}
+                    title="Adicionar foto"
+                    className="p-2.5 rounded-full bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400 hover:ring-2 hover:ring-teal-400/50 transition-all cursor-pointer"
+                  >
+                    <User className="w-6 h-6" />
+                  </button>
+                )}
+                <input
+                  ref={fotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFotoSelect}
+                />
+                {selectedPerson.fotoUrl && (
+                  <button
+                    onClick={() => fotoInputRef.current?.click()}
+                    title="Trocar foto"
+                    className="absolute -bottom-1 left-0 text-[8px] font-mono uppercase bg-white/80 dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800 rounded px-1 text-zinc-500 hover:text-teal-600 cursor-pointer"
+                  >
+                    Trocar
+                  </button>
+                )}
                 <div>
                   <h3 className="font-sans font-bold text-sm uppercase">{selectedPerson.nome}</h3>
                   <div className="text-[10px] text-zinc-400 font-mono mt-0.5 flex gap-2">
@@ -403,6 +481,9 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
               )}
             </div>
 
+            {fotoError && (
+              <p className="text-[10px] text-red-500 font-mono">{fotoError}</p>
+            )}
             {/* Toggle to switch between FREQUENTADOR and MEMBRO journey */}
             <div className="flex bg-slate-100/80 dark:bg-zinc-950/60 p-1 rounded-xl border border-slate-200/40 dark:border-white/5 w-full sm:w-fit self-center">
               <button

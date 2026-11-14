@@ -1,4 +1,4 @@
 {
-    "CodeGPT.apiKey": "Google AI Studio",
+    "CodeGPT.apiKey": "Anthropic",
     "js/ts.tsdk.path": "node_modules/typescript/lib"
 }

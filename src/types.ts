@@ -137,6 +137,9 @@ export interface Person {
 
   // Jornada específica de Membro (dedicações contínuas, cursos de nível, ikebana, purificações, etc)
   jornadaMembro?: JornadaMembro;
+
+  // Foto da pessoa (data URL Base64 comprimido — evita depender do Firebase Storage/Blaze)
+  fotoUrl?: string;
 }
 
 export interface Family {
