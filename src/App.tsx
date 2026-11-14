@@ -35,8 +35,13 @@ import {
   onAppUserChangeRealtime,
   fetchAllAppUsers,
   updateAppUserApproval,
-  logActionToFirebase
+  logActionToFirebase,
+  onPeopleRealtime,
+  onStructureRealtime,
+  salvarAlteracoesPessoas,
+  migrarFotosDoCadastro,
 } from './utils/firebase';
+import { salvarCacheLocal, lerCacheLocal, limparCacheLocal } from './utils/cacheLocal';
 import { onAuthStateChanged } from 'firebase/auth';
 import AuthView from './components/AuthView';
 
@@ -75,6 +80,23 @@ export default function App() {
   // Referências de controle para otimização e estabilização de sessões no Firebase
   const dataLoadedRef = useRef<boolean>(false);
   const activeUserIdRef = useRef<string | null>(null);
+  const pararEscutaDadosRef = useRef<(() => void) | null>(null);
+  const migracaoFotosRef = useRef<boolean>(false);
+
+  // Quando preenchido, o app mostra a cópia local e NÃO grava nada (ver carregamento).
+  const [modoSomenteLeitura, setModoSomenteLeitura] = useState<string | null>(null);
+  const modoSomenteLeituraRef = useRef<string | null>(null);
+  modoSomenteLeituraRef.current = modoSomenteLeitura;
+
+  const bloquearSeSomenteLeitura = (): boolean => {
+    if (!modoSomenteLeituraRef.current) return false;
+    alert('Sem conexão com o servidor: o app está em modo somente leitura e esta alteração NÃO foi salva. Verifique a internet e recarregue a página.');
+    return true;
+  };
+
+  const avisarFalhaAoSalvar = () => {
+    alert('Atenção: a última alteração NÃO foi salva no servidor. Verifique a internet e tente de novo.');
+  };
 
   // Theme fixa: removido toggle (mantemos tema light por simplicidade)
   const isDark = false;
@@ -389,167 +411,149 @@ export default function App() {
         setCurrentUser(user);
         setIsLoading(true);
 
-        // Define fallback profile immediately in case of timeout/offline
+        // ---- Carregamento dos dados ----
+        // Pessoas e estrutura chegam em TEMPO REAL (onSnapshot), então todos
+        // veem as mudanças uns dos outros. Enquanto o servidor não responde,
+        // mostramos a cópia guardada no navegador SOMENTE PARA LEITURA: antes,
+        // com conexão lenta (>2,5 s), o app editava a partir dessa cópia velha
+        // e sobrescrevia o trabalho dos outros usuários.
         const isOwner = (user.email || '').toLowerCase().trim() === 'pedro.ms.bogalho@gmail.com';
         const fallbackProfile: AppUser = {
           uid: user.uid,
           email: user.email || 'offline@jornadajc.app.local',
           displayName: user.displayName || 'Usuário Offline',
           role: isOwner ? 'ADMIN' : 'ASSISTANT',
-          approved: true, // Se falhar a conexão, permite acesso local/offline
+          approved: true, // só para exibir a cópia local; o modo somente leitura impede gravações
           requestDate: new Date().toISOString()
         };
+        let perfilCarregado = false;
 
-        // Criamos um sinal/flag de controle para evitar corrida de estados
-        let initialized = false;
-
-        // Função de fallback para modo Local/Offline
-        const handleOfflineFallback = (reason: string) => {
-          if (initialized) return;
-          initialized = true;
-          console.warn(`[Firebase Offline Fallback] Using LocalStorage because: ${reason}`);
-
-          setCurrentAppUser(fallbackProfile);
-          setUserRole(fallbackProfile.role);
-
-          const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-          const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-
-          if (cachedPeople) {
-            setPeople(cleanSanitizeAndEnrichPeople(JSON.parse(cachedPeople)));
-          } else {
-            setPeople([]);
+        const mostrarCacheSomenteLeitura = (motivo: string) => {
+          if (dataLoadedRef.current) return; // dados ao vivo já chegaram
+          console.warn(`[Somente leitura] ${motivo}`);
+          if (!perfilCarregado) {
+            setCurrentAppUser(fallbackProfile);
+            setUserRole(fallbackProfile.role);
           }
-
-          if (cachedStructure) {
-            setStructure(JSON.parse(cachedStructure));
-          } else {
-            setStructure(DEFAULT_STRUCTURE);
-          }
-
-          dataLoadedRef.current = true; // Marca como carregado no fallback offline
+          const cachedPeople = lerCacheLocal('jc_people_shared');
+          const cachedStructure = lerCacheLocal('jc_structure_shared');
+          setPeople(Array.isArray(cachedPeople) ? cleanSanitizeAndEnrichPeople(cachedPeople) : []);
+          setStructure(cachedStructure || DEFAULT_STRUCTURE);
+          setModoSomenteLeitura(motivo);
           setIsLoading(false);
           setAuthLoading(false);
         };
 
-        // Limite de tempo de 3.5 segundos para conectar e autenticar no Firestore
         const offlineTimeout = setTimeout(() => {
-          handleOfflineFallback("Firestore connection timeout (3.5s)");
+          mostrarCacheSomenteLeitura('Sem resposta do servidor. Mostrando a última cópia salva neste aparelho.');
         }, 3500);
+
+        let pessoasAoVivo = false;
+        let estruturaAoVivo = false;
+        const marcarSeAoVivo = () => {
+          if (!pessoasAoVivo || !estruturaAoVivo) return;
+          clearTimeout(offlineTimeout);
+          dataLoadedRef.current = true;
+          setModoSomenteLeitura(null);
+          setIsLoading(false);
+          setAuthLoading(false);
+        };
+
+        const iniciarEscutaDados = () => {
+          if (pararEscutaDadosRef.current) return; // já escutando
+          if (!dataLoadedRef.current) setIsLoading(true);
+
+          const pararPessoas = onPeopleRealtime((lista, doServidor) => {
+            if (!doServidor && lista.length === 0) return; // cache vazio do Firestore: aguarda o servidor
+            const limpos = cleanSanitizeAndEnrichPeople(lista);
+            setPeople(limpos);
+            salvarCacheLocal('jc_people_shared', limpos);
+            if (doServidor && !pessoasAoVivo) {
+              pessoasAoVivo = true;
+              marcarSeAoVivo();
+            }
+            // Migração única: fotos que ainda estão dentro do cadastro vão para fotos_pessoas.
+            const comFotoAntiga = lista.filter(p => typeof (p as any).fotoUrl === 'string' && (p as any).fotoUrl.startsWith('data:'));
+            if (doServidor && comFotoAntiga.length > 0 && !migracaoFotosRef.current) {
+              migracaoFotosRef.current = true;
+              migrarFotosDoCadastro(comFotoAntiga, user.email || user.uid)
+                .then(n => n > 0 && console.log(`[Fotos] ${n} foto(s) movida(s) para fotos_pessoas.`));
+            }
+          }, (err) => {
+            console.error('Erro na escuta de pessoas:', err);
+            setModoSomenteLeitura('A conexão com o servidor caiu. Recarregue a página para voltar a editar.');
+          });
+
+          const pararEstrutura = onStructureRealtime((fbStructure, doServidor) => {
+            if (fbStructure) {
+              setStructure(fbStructure);
+              salvarCacheLocal('jc_structure_shared', fbStructure);
+            } else if (doServidor) {
+              setStructure(DEFAULT_STRUCTURE);
+              saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
+            }
+            if (doServidor && !estruturaAoVivo) {
+              estruturaAoVivo = true;
+              marcarSeAoVivo();
+            }
+          }, (err) => {
+            console.error('Erro na escuta da estrutura:', err);
+            setModoSomenteLeitura('A conexão com o servidor caiu. Recarregue a página para voltar a editar.');
+          });
+
+          pararEscutaDadosRef.current = () => {
+            pararPessoas();
+            pararEstrutura();
+            pessoasAoVivo = false;
+            estruturaAoVivo = false;
+          };
+        };
 
         try {
           // Garante que o documento de perfil no Firestore existe
           const userEmail = user.email || `${user.displayName?.toLowerCase().replace(/\s+/g, '') || 'usuario'}@jornadajc.app.local`;
           const initialProfile = await createAppUserOrGet(user.uid, userEmail, user.displayName || '');
+          perfilCarregado = true;
+          setCurrentAppUser(initialProfile);
+          setUserRole(initialProfile.role);
 
-          // Se o timeout ainda não disparou o fallback offline:
-          if (!initialized) {
-            setCurrentAppUser(initialProfile);
-            setUserRole(initialProfile.role);
+          // Escuta em tempo real as mudanças no perfil (ex: aprovação pelo administrador)
+          unsubscribeRealtime = onAppUserChangeRealtime(user.uid, (latestAppUser) => {
+            if (latestAppUser) {
+              setCurrentAppUser(latestAppUser);
+              setUserRole(latestAppUser.role);
 
-            // Escuta em tempo real as mudanças no perfil (ex: aprovação pelo administrador)
-            unsubscribeRealtime = onAppUserChangeRealtime(user.uid, async (latestAppUser) => {
-              // Limpa o timeout de offline pois conseguimos conectar com sucesso!
-              clearTimeout(offlineTimeout);
-
-              if (latestAppUser) {
-                setCurrentAppUser(latestAppUser);
-                setUserRole(latestAppUser.role);
-
-                if (latestAppUser.approved) {
-                  // Otimização Crítica: Se os dados já foram carregados uma vez,
-                  // não precisamos buscar tudo de novo e piscar a tela toda de carregamento.
-                  if (dataLoadedRef.current) {
-                    setIsLoading(false);
-                    setAuthLoading(false);
-                    return;
-                  }
-
-                  setIsLoading(true);
-                  try {
-                    const fbPeople = await fetchPeopleFromFirebase(user.uid);
-                    const fbStructure = await fetchStructureFromFirebase(user.uid);
-
-                    if (fbPeople && fbPeople.length > 0) {
-                      const cleanPeople = cleanSanitizeAndEnrichPeople(fbPeople);
-                      setPeople(cleanPeople);
-                      localStorage.setItem('jc_people_shared', JSON.stringify(cleanPeople));
-                    } else {
-                      const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-                      if (cachedPeople) {
-                        const parsed = JSON.parse(cachedPeople);
-                        if (parsed.length > 0) {
-                          const cleanPeople = cleanSanitizeAndEnrichPeople(parsed);
-                          setPeople(cleanPeople);
-                          savePeopleBatchToFirebase(user.uid, cleanPeople).catch(err => console.error("Auto-migration of people failed:", err));
-                        }
-                      } else {
-                        setPeople([]);
-                      }
-                    }
-
-                    if (fbStructure) {
-                      setStructure(fbStructure);
-                      localStorage.setItem('jc_structure_shared', JSON.stringify(fbStructure));
-                    } else {
-                      const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-                      if (cachedStructure) {
-                        const parsed = JSON.parse(cachedStructure);
-                        setStructure(parsed);
-                        saveStructureToFirebase(user.uid, parsed).catch(err => console.error("Auto-migration of structure failed:", err));
-                      } else {
-                        setStructure(DEFAULT_STRUCTURE);
-                        saveStructureToFirebase(user.uid, DEFAULT_STRUCTURE).catch(err => console.error("Initial structure save failed:", err));
-                      }
-                    }
-                    dataLoadedRef.current = true; // Sincronização inicial efetuada
-                  } catch (error) {
-                    console.error("Failed to load user database, falling back to LocalStorage:", error);
-                    const cachedPeople = localStorage.getItem('jc_people_shared') || localStorage.getItem(`jc_people_${user.uid}`) || localStorage.getItem('jc_people');
-                    const cachedStructure = localStorage.getItem('jc_structure_shared') || localStorage.getItem(`jc_structure_${user.uid}`) || localStorage.getItem('jc_structure');
-                    if (cachedPeople) {
-                      setPeople(cleanSanitizeAndEnrichPeople(JSON.parse(cachedPeople)));
-                    }
-                    if (cachedStructure) {
-                      setStructure(JSON.parse(cachedStructure));
-                    } else {
-                      setStructure(DEFAULT_STRUCTURE);
-                    }
-                    dataLoadedRef.current = true;
-                  } finally {
-                    setIsLoading(false);
-                    setAuthLoading(false);
-                  }
-                } else {
-                  // Se explicitamente não aprovado pelo administrador, limpa os dados em tela e aguarda aprovação
-                  setPeople([]);
-                  setStructure(DEFAULT_STRUCTURE);
-                  dataLoadedRef.current = false;
-                  setIsLoading(false);
-                  setAuthLoading(false);
-                }
+              if (latestAppUser.approved) {
+                iniciarEscutaDados();
               } else {
-                // Se latestAppUser for null (ex: oscilação de rede ou erro temporário do snapshot):
-                // Só limpamos se o usuário realmente não tiver nenhum dado em cache local,
-                // evitando "sumir" com os dados de quem já estava navegando normalmente.
-                setCurrentAppUser(null);
-                const hasLocalCache = localStorage.getItem('jc_people_shared') || localStorage.getItem('jc_people');
-                if (!hasLocalCache) {
-                  setPeople([]);
-                  setStructure(DEFAULT_STRUCTURE);
-                  dataLoadedRef.current = false;
-                }
+                // Não aprovado (ou aprovação revogada): para de escutar e limpa a tela.
+                clearTimeout(offlineTimeout);
+                pararEscutaDadosRef.current?.();
+                pararEscutaDadosRef.current = null;
+                setPeople([]);
+                setStructure(DEFAULT_STRUCTURE);
+                setModoSomenteLeitura(null);
+                dataLoadedRef.current = false;
                 setIsLoading(false);
                 setAuthLoading(false);
               }
-            });
-          }
+            } else {
+              // Perfil momentaneamente indisponível (oscilação de rede): mantém o que está na tela.
+              setCurrentAppUser(null);
+              setIsLoading(false);
+              setAuthLoading(false);
+            }
+          });
         } catch (error) {
-          clearTimeout(offlineTimeout);
           console.error("Error setting up user session:", error);
-          handleOfflineFallback(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          mostrarCacheSomenteLeitura('Não foi possível conectar ao servidor. Mostrando a última cópia salva neste aparelho.');
         }
       } else {
+        pararEscutaDadosRef.current?.();
+        pararEscutaDadosRef.current = null;
+        migracaoFotosRef.current = false;
+        limparCacheLocal(); // sem login, não deixa dados pessoais guardados no aparelho
+        setModoSomenteLeitura(null);
         activeUserIdRef.current = null;
         dataLoadedRef.current = false;
         setCurrentUser(null);
@@ -566,6 +570,8 @@ export default function App() {
       if (unsubscribeRealtime) {
         unsubscribeRealtime();
       }
+      pararEscutaDadosRef.current?.();
+      pararEscutaDadosRef.current = null;
     };
   }, []);
 
@@ -646,6 +652,7 @@ export default function App() {
     options?: { skipAuditLogs?: boolean; batchAction?: string; batchDetails?: string }
   ) => {
     if (!currentUser) return;
+    if (bloquearSeSomenteLeitura()) return;
     const enriched = cleanSanitizeAndEnrichPeople(newPeople);
 
     const skipAuditLogs = options?.skipAuditLogs ?? false;
@@ -720,64 +727,60 @@ export default function App() {
       }
     });
 
-    setPeople(enriched);
-    localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
+    // Aplica só as pessoas alteradas/excluídas sobre o estado MAIS RECENTE
+    // (que pode ter recebido mudanças de outros usuários em tempo real
+    // depois que esta tela montou a lista `newPeople`).
+    const alteradasPorId = new Map<string, Person>(changedPeople.map(p => [p.id, p]));
+    const excluidas = new Set(deletedIds);
+    setPeople(prev => {
+      const prevIds = new Set(prev.map(p => p.id));
+      const atualizado = prev
+        .filter(p => !excluidas.has(p.id))
+        .map(p => alteradasPorId.get(p.id) || p);
+      changedPeople.forEach(p => { if (!prevIds.has(p.id)) atualizado.push(p); });
+      salvarCacheLocal('jc_people_shared', atualizado);
+      return atualizado;
+    });
 
-    // Executa atualizações incrementais em vez de regravar todos os 690+ membros
+    // Grava no Firestore só os campos que mudaram (ver salvarAlteracoesPessoas).
+    if (changedPeople.length === 0 && deletedIds.length === 0) return;
+    console.log(`[Sync] Gravando ${changedPeople.length} alterações/adições e ${deletedIds.length} exclusões no Firestore.`);
     try {
-      if (changedPeople.length > 0 || deletedIds.length > 0) {
-        console.log(`[Granular Sync] Sincronizando ${changedPeople.length} alterações/adições e ${deletedIds.length} exclusões no Firestore.`);
-
-        // Se houver mais de 15 alterações, usa gravação em lote (ex: importação, carga demo ou edição em massa por IA)
-        if (changedPeople.length > 15) {
-          await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
-          if (!skipAuditLogs) {
-            await logActionToFirebase(
-              currentUser.uid,
-              currentUser.email || '',
-              currentAppUser?.displayName,
-              'EDITAR_PESSOA',
-              `Sincronização/Importação de dados em lote: processou ${changedPeople.length} registros.`
-            );
-          } else if (batchAction) {
-            await logActionToFirebase(
-              currentUser.uid,
-              currentUser.email || '',
-              currentAppUser?.displayName,
-              batchAction,
-              batchDetails || `Importação de ${changedPeople.length} registros.`,
-            );
-          }
-        } else {
-          // Grava cada modificação individualmente de forma paralela para economizar cota de escrita
-          await Promise.all([
-            ...changedPeople.map(p => savePersonToFirebase(currentUser.uid, p)),
-            ...deletedIds.map(id => deletePersonFromFirebase(currentUser.uid, id))
-          ]);
-          if (skipAuditLogs && batchAction) {
-            await logActionToFirebase(
-              currentUser.uid,
-              currentUser.email || '',
-              currentAppUser?.displayName,
-              batchAction,
-              batchDetails || `Importação de ${changedPeople.length} registros.`,
-            );
-          }
-        }
-      }
+      await salvarAlteracoesPessoas(currentPeopleMap, changedPeople, deletedIds);
     } catch (err) {
       console.error("Error syncing updated people list to Firebase:", err);
+      avisarFalhaAoSalvar();
+      return;
+    }
+
+    if (changedPeople.length > 15 && !skipAuditLogs) {
+      logActionToFirebase(
+        currentUser.uid,
+        currentUser.email || '',
+        currentAppUser?.displayName,
+        'EDITAR_PESSOA',
+        `Sincronização/Importação de dados em lote: processou ${changedPeople.length} registros.`
+      );
+    } else if (skipAuditLogs && batchAction) {
+      logActionToFirebase(
+        currentUser.uid,
+        currentUser.email || '',
+        currentAppUser?.displayName,
+        batchAction,
+        batchDetails || `Importação de ${changedPeople.length} registros.`,
+      );
     }
   };
 
   const handleUpdateFamilies = (newFamilies: Family[]) => {
     if (!currentUser) return;
     setFamilies(newFamilies);
-    localStorage.setItem('jc_families_shared', JSON.stringify(newFamilies));
+    salvarCacheLocal('jc_families_shared', newFamilies);
   };
 
   const handleUpdateStructure = async (newStructure: JohreiCenterStructure) => {
     if (!currentUser) return;
+    if (bloquearSeSomenteLeitura()) return;
     // Track changes for logs
     const addedAMs = newStructure.amList.filter(am => !structure.amList.some(x => x.id === am.id)).map(am => am.name);
     const removedAMs = structure.amList.filter(am => !newStructure.amList.some(x => x.id === am.id)).map(am => am.name);
@@ -844,10 +847,10 @@ export default function App() {
 
     const enriched = cleanSanitizeAndEnrichPeople(nextPeople);
     setPeople(enriched);
-    localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
+    salvarCacheLocal('jc_people_shared', enriched);
 
     setStructure(newStructure);
-    localStorage.setItem('jc_structure_shared', JSON.stringify(newStructure));
+    salvarCacheLocal('jc_structure_shared', newStructure);
 
     // Salva primeiro a estrutura (operação rápida e crítica)
     try {
@@ -869,10 +872,11 @@ export default function App() {
     // em vez de regravar toda a base (centenas de registros) a cada alteração da estrutura.
     if (changedPeople.length > 0) {
       try {
-        await savePeopleBatchToFirebase(currentUser.uid, changedPeople);
+        await salvarAlteracoesPessoas(previousPeopleMap, changedPeople);
         console.log(`[Estrutura] ${changedPeople.length} membros re-normalizados sincronizados no Firebase.`);
       } catch (err) {
         console.error("Erro ao sincronizar membros re-normalizados no Firebase:", err);
+        avisarFalhaAoSalvar();
       }
     }
   };
@@ -880,9 +884,10 @@ export default function App() {
   // Helper for quick load demo database
   const handleLoadDemoData = async () => {
     if (!currentUser) return;
+    if (bloquearSeSomenteLeitura()) return;
     const enriched = cleanSanitizeAndEnrichPeople(INITIAL_PEOPLE);
     setPeople(enriched);
-    localStorage.setItem('jc_people_shared', JSON.stringify(enriched));
+    salvarCacheLocal('jc_people_shared', enriched);
     try {
       await savePeopleBatchToFirebase(currentUser.uid, enriched);
       alert('Banco de dados de demonstração carregado e salvo no Firebase com sucesso!');
@@ -896,6 +901,7 @@ export default function App() {
   // Antes havia 3 cópias dessa lógica — qualquer correção precisava ser feita 3 vezes.
   const processCsvImport = async (csvText: string, viaLabel: string) => {
     if (!currentUser) return;
+    if (bloquearSeSomenteLeitura()) return;
     try {
       const parsed = parseCSV(csvText);
       if (parsed.length === 0) {
@@ -905,12 +911,12 @@ export default function App() {
       const enriched = cleanSanitizeAndEnrichPeople(parsed as Person[]);
       const merged = mergeImportedPeople(people, enriched);
       setPeople(merged);
-      localStorage.setItem('jc_people_shared', JSON.stringify(merged));
-      localStorage.setItem(`jc_people_${currentUser.uid}`, JSON.stringify(merged));
+      salvarCacheLocal('jc_people_shared', merged);
       setOnboardingError('');
       setOnboardingCSV('');
       try {
-        await savePeopleBatchToFirebase(currentUser.uid, merged);
+        // Só grava quem a importação realmente mudou (antes regravava a base inteira).
+        await salvarAlteracoesPessoas(new Map<string, Person>(people.map(p => [p.id, p])), merged);
         await logActionToFirebase(
           currentUser.uid,
           currentUser.email || '',
@@ -990,15 +996,11 @@ export default function App() {
 
   const confirmResetDatabase = async () => {
     if (!currentUser) return;
+    if (bloquearSeSomenteLeitura()) return;
     setPeople([]);
     // FIX: limpa TODOS os caches locais relacionados (antes deixava 'jc_people_shared',
     // 'jc_structure_shared' e 'jc_families_shared' órfãos, e o app ressucitava dados "apagados").
-    localStorage.removeItem(`jc_people_${currentUser.uid}`);
-    localStorage.removeItem('jc_people_shared');
-    localStorage.removeItem('jc_people');
-    localStorage.removeItem('jc_structure_shared');
-    localStorage.removeItem('jc_structure');
-    localStorage.removeItem('jc_families_shared');
+    limparCacheLocal();
     setOnboardingCSV('');
     setOnboardingError('');
     setShowResetModal(false);
@@ -1479,6 +1481,22 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </button>
           </header>
+
+          {/* Aviso de modo somente leitura (sem conexão com o servidor) */}
+          {modoSomenteLeitura && (
+            <div role="alert" className="mx-4 mt-4 md:mx-8 p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">
+                <strong>Somente leitura.</strong> {modoSomenteLeitura} Alterações não serão salvas até a conexão voltar.
+              </span>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-semibold hover:bg-amber-700 cursor-pointer self-start sm:self-auto"
+              >
+                Recarregar
+              </button>
+            </div>
+          )}
 
           {/* Tab View switching workspace */}
           <div className="flex-1 p-4 pb-32 md:p-8 md:pb-16 overflow-y-auto max-w-7xl w-full mx-auto">

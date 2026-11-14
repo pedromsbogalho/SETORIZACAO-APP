@@ -83,6 +83,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Fotos das pessoas (data URL JPEG comprimida no navegador; sem Firebase Storage).
+    // Limite de ~300 mil caracteres por foto, bem abaixo do 1 MiB por documento.
+    match /fotos_pessoas/{personId} {
+      allow read: if isApproved();
+      allow create, update: if isApproved()
+        && request.resource.data.personId == personId
+        && request.resource.data.dataUrl is string
+        && request.resource.data.dataUrl.matches('^data:image/jpeg;base64,.*')
+        && request.resource.data.dataUrl.size() < 300000;
+      allow delete: if isApproved();
+    }
+
     match /logs/{logId} {
       allow create: if isApproved();
       allow read: if isAdmin();
