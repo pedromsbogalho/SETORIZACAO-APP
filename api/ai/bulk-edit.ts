@@ -1,5 +1,73 @@
 import { GoogleGenAI } from "@google/genai";
 
+// --- Autenticação da rota de IA ---
+// Só usuários logados E aprovados podem chamar a IA (antes a rota era aberta e
+// qualquer pessoa na internet podia gastar a chave do Gemini).
+// Sem firebase-admin/conta de serviço: lemos o próprio perfil do usuário na API
+// REST do Firestore usando o token dele. O Firestore valida o token (assinatura,
+// validade, projeto) e as regras de segurança — se o token for falso, a leitura falha.
+// projectId e databaseId não são segredos (já vão no JavaScript do navegador).
+const FIREBASE_PROJECT_ID =
+  process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'project-5c707c77-a3d7-4999-882';
+const FIRESTORE_DATABASE_ID =
+  process.env.FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID || 'ai-studio-0703a7bd-0c96-4411-94f0-747479362cad';
+
+export interface ResultadoAutenticacao {
+  ok: boolean;
+  status: number; // 200 quando ok
+  error?: string;
+  uid?: string;
+  role?: string;
+}
+
+function lerUidDoToken(idToken: string): string | null {
+  try {
+    const payload = idToken.split('.')[1];
+    if (!payload) return null;
+    const json = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    const uid = json.user_id || json.sub;
+    return typeof uid === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(uid) ? uid : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function verificarUsuarioAprovado(authorizationHeader: unknown): Promise<ResultadoAutenticacao> {
+  const header = typeof authorizationHeader === 'string' ? authorizationHeader : '';
+  const idToken = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!idToken) {
+    return { ok: false, status: 401, error: 'É preciso estar logado para usar a edição com IA.' };
+  }
+  const uid = lerUidDoToken(idToken);
+  if (!uid) {
+    return { ok: false, status: 401, error: 'Sessão inválida. Saia e entre novamente.' };
+  }
+
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}` +
+    `/databases/${encodeURIComponent(FIRESTORE_DATABASE_ID)}/documents/users/${encodeURIComponent(uid)}`;
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
+  } catch (err) {
+    console.error('Falha ao verificar usuário no Firestore:', err);
+    return { ok: false, status: 503, error: 'Não foi possível verificar seu acesso agora. Tente de novo.' };
+  }
+  if (resposta.status === 401 || resposta.status === 403 || resposta.status === 404) {
+    return { ok: false, status: 401, error: 'Sessão inválida ou expirada. Saia e entre novamente.' };
+  }
+  if (!resposta.ok) {
+    console.error('Firestore respondeu', resposta.status, 'ao verificar usuário.');
+    return { ok: false, status: 503, error: 'Não foi possível verificar seu acesso agora. Tente de novo.' };
+  }
+  const perfil: any = await resposta.json().catch(() => null);
+  const approved = perfil?.fields?.approved?.booleanValue === true;
+  const role = perfil?.fields?.role?.stringValue || '';
+  if (!approved) {
+    return { ok: false, status: 403, error: 'Seu acesso ainda não foi aprovado pelo administrador.' };
+  }
+  return { ok: true, status: 200, uid, role };
+}
+
 function parseYearValue(value: unknown): number | null {
   if (value === null || value === undefined) return null;
 
@@ -83,24 +151,18 @@ function getFallbackBulkEditUpdates(prompt: string, people: any[], viewContext?:
 }
 
 export default async function handler(req: any, res: any) {
-  // CORS support
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+  // Sem cabeçalhos CORS: o app chama esta rota do mesmo domínio, então não é
+  // preciso (e antes o "Access-Control-Allow-Origin: *" liberava qualquer site).
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
+    const autenticacao = await verificarUsuarioAprovado(req.headers?.authorization);
+    if (!autenticacao.ok) {
+      return res.status(autenticacao.status).json({ error: autenticacao.error });
+    }
+
     const { prompt, people, viewContext } = req.body;
     if (!prompt || !people) {
       return res.status(400).json({ error: "Faltam parâmetros obrigatórios: 'prompt' e 'people'" });

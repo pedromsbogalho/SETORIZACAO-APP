@@ -12,35 +12,65 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Dono do sistema. Exige e-mail verificado: sem isso, alguém poderia criar
+    // uma conta de e-mail/senha com este endereço e ganhar acesso de admin.
+    function isOwner() {
+      return isSignedIn()
+        && request.auth.token.email == 'pedro.ms.bogalho@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isApproved() {
-      return isSignedIn() && (
-        getUserData().approved == true || 
-        request.auth.token.email == 'pedro.ms.bogalho@gmail.com'
-      );
+      return isOwner() || (isSignedIn() && getUserData().approved == true);
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        getUserData().role == 'ADMIN' || 
-        request.auth.token.email == 'pedro.ms.bogalho@gmail.com'
-      );
+      return isOwner() || (isApproved() && getUserData().role == 'ADMIN');
+    }
+
+    function isAM() {
+      return isSignedIn() && getUserData().role == 'AM';
     }
 
     // User registrations
     match /users/{userId} {
-      // Users can read/write their own registration
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
-      // Admin can manage all profiles
-      allow read, write: if isAdmin();
+      // Cada um lê o próprio cadastro; o admin lê e gerencia todos.
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+
+      // Cadastro novo: o próprio usuário cria o seu, SEMPRE não aprovado e como
+      // ASSISTANT, sem setores. Antes ele podia gravar approved: true e
+      // role: 'ADMIN' no próprio documento e se aprovar sozinho.
+      allow create: if isAdmin() || (
+        isSignedIn() && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.approved == false
+        && request.resource.data.role == 'ASSISTANT'
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'approved', 'requestDate'])
+      );
+
+      // O próprio usuário pode atualizar o seu cadastro, mas nunca os campos de
+      // permissão (aprovação, papel, setores) nem a identidade.
+      allow update: if isAdmin() || (
+        isSignedIn() && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['uid', 'email', 'role', 'approved', 'sector', 'sectors'])
+      );
+
+      allow delete: if isAdmin();
     }
 
     // Shared collections (accessible ONLY to approved users)
     match /people/{personId} {
-      allow read, write: if isApproved();
+      allow read, create, update: if isApproved();
+      // Assistente de Ministro (AM) não exclui pessoas (a tela já bloqueava;
+      // agora o banco também).
+      // A restrição de edição por setor do AM continua só na tela: o AM
+      // acompanha frequentadores de outros setores na Jornada.
+      allow delete: if isAdmin() || (isApproved() && !isAM());
     }
 
     match /families/{familyId} {
@@ -48,7 +78,9 @@ service cloud.firestore {
     }
 
     match /structures/{structureId} {
-      allow read, write: if isApproved();
+      allow read, create, update: if isApproved();
+      // Apagar a estrutura inteira só acontece em "Limpar Banco de Dados" (admin).
+      allow delete: if isAdmin();
     }
 
     match /logs/{logId} {
