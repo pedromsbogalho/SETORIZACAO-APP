@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import { verificarUsuarioAprovado } from "./api/ai/bulk-edit";
 
 dotenv.config();
 
@@ -20,6 +21,11 @@ async function startServer() {
   // API endpoint for Gemini bulk edits
   app.post("/api/ai/bulk-edit", async (req, res) => {
     try {
+      const autenticacao = await verificarUsuarioAprovado(req.headers.authorization);
+      if (!autenticacao.ok) {
+        return res.status(autenticacao.status).json({ error: autenticacao.error });
+      }
+
       const { prompt, people, viewContext } = req.body;
       if (!prompt || !people) {
         return res.status(400).json({ error: "Faltam parâmetros obrigatórios: 'prompt' e 'people'" });

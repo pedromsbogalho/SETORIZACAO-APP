@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Person } from '../types';
+import { auth } from '../utils/firebase';
 import { Sparkles, Bot, Send, X, ChevronUp, ChevronDown, CheckCircle, AlertTriangle, Undo2, CornerDownLeft, Info } from 'lucide-react';
 
 interface UpdatePeopleOptions {
@@ -87,10 +88,16 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
     setSuccessResponse(null);
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        throw new Error('É preciso estar logado para usar a edição com IA.');
+      }
+
       const response = await fetch('/api/ai/bulk-edit', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
         },
         body: JSON.stringify({
           prompt,
