@@ -1,0 +1,12 @@
+{
+  "name": "migracao-firebase",
+  "private": true,
+  "type": "module",
+  "description": "Cópia do Firestore e conferência dos logins entre dois projetos Firebase (ver docs/MIGRACAO-FIREBASE.md).",
+  "scripts": {
+    "copiar": "node copiar-firestore.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

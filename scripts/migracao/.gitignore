@@ -1,0 +1,5 @@
+node_modules/
+# Chaves de conta de serviço e exportações de usuários: NUNCA vão para o Git.
+*.json
+!package.json
+!package-lock.json
