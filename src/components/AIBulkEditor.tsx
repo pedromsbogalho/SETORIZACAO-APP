@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Person } from '../types';
 import { auth } from '../utils/firebase';
+import { normalizarAtualizacao, aplicarAtualizacao, descreverMudancas, atualizacaoVazia, AtualizacaoNormalizada } from '../utils/edicaoIA';
 import { Sparkles, Bot, Send, X, ChevronUp, ChevronDown, CheckCircle, AlertTriangle, Undo2, CornerDownLeft, Info } from 'lucide-react';
 
 interface UpdatePeopleOptions {
@@ -27,8 +28,18 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
     affectedNames: string[];
   } | null>(null);
 
-  // Snapshot of the previous state for undo support
-  const [previousPeopleSnapshot, setPreviousPeopleSnapshot] = useState<Person[] | null>(null);
+  // Prévia: o que a IA propôs, ainda NÃO salvo. Só grava ao confirmar.
+  const [preview, setPreview] = useState<{
+    explanation: string;
+    itens: { id: string; nome: string; atualizacao: AtualizacaoNormalizada; linhas: string[] }[];
+    ignorados: string[];
+  } | null>(null);
+
+  // Para desfazer: para cada pessoa alterada, só os CAMPOS que a IA mudou,
+  // com o valor anterior. (Restaurar a ficha ou a lista inteira desfaria
+  // também o que outros usuários mudaram nesse meio-tempo, já que os dados
+  // chegam em tempo real.)
+  const [previousPeopleSnapshot, setPreviousPeopleSnapshot] = useState<Map<string, Record<string, unknown>> | null>(null);
 
   // Map active tabs to human-friendly Portuguese labels
   const tabLabel = useMemo(() => {
@@ -86,6 +97,7 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
     setIsLoading(true);
     setError(null);
     setSuccessResponse(null);
+    setPreview(null);
 
     try {
       const idToken = await auth.currentUser?.getIdToken();
@@ -118,107 +130,32 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
         throw new Error(result.explanation || "Não consegui processar essa edição em massa.");
       }
 
-      if (!result.updates || result.updates.length === 0) {
+      // Valida cada alteração e calcula o que muda, SEM salvar ainda.
+      const porId = new Map<string, Person>(people.map(p => [String(p.id), p]));
+      const itens: { id: string; nome: string; atualizacao: AtualizacaoNormalizada; linhas: string[] }[] = [];
+      const ignorados: string[] = [];
+      (result.updates || []).forEach((u: any) => {
+        const pessoa = porId.get(String(u.id));
+        if (!pessoa) return;
+        const atualizacao = normalizarAtualizacao(u.updates);
+        atualizacao.ignorados.forEach(msg => ignorados.push(`${pessoa.nome} — ${msg}`));
+        if (atualizacaoVazia(atualizacao)) return;
+        const linhas = descreverMudancas(pessoa, aplicarAtualizacao(pessoa, atualizacao));
+        if (linhas.length > 0) itens.push({ id: pessoa.id, nome: pessoa.nome, atualizacao, linhas });
+      });
+
+      if (itens.length === 0) {
         setSuccessResponse({
-          explanation: "Nenhum membro correspondeu aos critérios informados. Nenhuma alteração foi realizada.",
+          explanation: ignorados.length > 0
+            ? 'A IA sugeriu alterações inválidas, que foram descartadas. Nada foi alterado.'
+            : 'Nenhum membro correspondeu aos critérios informados. Nenhuma alteração foi realizada.',
           updatedCount: 0,
           affectedNames: []
         });
-        setIsLoading(false);
         return;
       }
 
-      // Save a snapshot of current state for Undo
-      setPreviousPeopleSnapshot([...people]);
-
-      // Apply updates to existing people list
-      const affectedIds = new Set<string>();
-      const affectedNames: string[] = [];
-
-      const updatedPeople = people.map(p => {
-        // Safe string-based ID comparison to prevent type mismatch between numeric IDs
-        const updateObj = result.updates.find((u: any) => String(u.id) === String(p.id));
-        if (updateObj) {
-          affectedIds.add(p.id);
-          affectedNames.push(p.nome);
-
-          // Deep merge the updates
-          const merged = { ...p, ...updateObj.updates };
-
-          // Handle special deep object nested fields like cursoPosOutorga safely even if original is missing
-          if (updateObj.updates.cursoPosOutorga) {
-            const existingAulas = p.cursoPosOutorga?.aulas || {
-              1: 'Não iniciou',
-              2: 'Não iniciou',
-              3: 'Não iniciou',
-              4: 'Não iniciou',
-              5: 'Não iniciou'
-            };
-
-            // Extract incoming lesson status from multiple possible structures
-            const rawCursoPosOutorga = updateObj.updates.cursoPosOutorga || {};
-            const incomingAulas = rawCursoPosOutorga.aulas || rawCursoPosOutorga || {};
-
-            const getLessonValue = (num: number) => {
-              const keyStr = String(num);
-              
-              // 1. Try flat updates if present
-              const flatVal = updateObj.updates[`cursoPosOutorga.aulas.${keyStr}`] || 
-                              updateObj.updates[`cursoPosOutorga.aulas[${keyStr}]`] || 
-                              updateObj.updates[`cursoPosOutorga.${keyStr}`];
-              if (flatVal && typeof flatVal === 'string') return flatVal;
-
-              // 2. Try nested object properties
-              const nestedVal = incomingAulas[num] || incomingAulas[keyStr];
-              if (nestedVal && typeof nestedVal === 'string') return nestedVal;
-
-              // 3. Fallback to existing value
-              return existingAulas[num as 1|2|3|4|5] || 'Não iniciou';
-            };
-
-            merged.cursoPosOutorga = {
-              aulas: {
-                1: getLessonValue(1),
-                2: getLessonValue(2),
-                3: getLessonValue(3),
-                4: getLessonValue(4),
-                5: getLessonValue(5)
-              }
-            };
-          }
-
-          // Handle special deep object nested fields for cursoIniciacao safely
-          if (updateObj.updates.cursoIniciacao) {
-            const existingCI: any = p.cursoIniciacao || {};
-            const incomingCI: any = updateObj.updates.cursoIniciacao || {};
-
-            merged.cursoIniciacao = {
-              ...existingCI,
-              ...incomingCI,
-              aulas: {
-                ...(existingCI.aulas || {}),
-                ...(incomingCI.aulas || {})
-              },
-              dataPorAula: incomingCI.concluido === false ? {} : { ...(existingCI.dataPorAula || {}), ...(incomingCI.dataPorAula || {}) },
-              instrutoresPorAula: incomingCI.concluido === false ? {} : { ...(existingCI.instrutoresPorAula || {}), ...(incomingCI.instrutoresPorAula || {}) }
-            };
-          }
-
-          return merged;
-        }
-        return p;
-      });
-
-      // Commit changes to parent & Firebase persistence
-      onUpdatePeople(updatedPeople);
-
-      setSuccessResponse({
-        explanation: result.explanation,
-        updatedCount: result.updates.length,
-        affectedNames
-      });
-
-      setPrompt('');
+      setPreview({ explanation: result.explanation, itens, ignorados });
     } catch (err: any) {
       console.error(err);
       
@@ -272,10 +209,42 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
     }
   };
 
-  // Restore snapshot of people data to revert changes
+  // Confirma a prévia: aplica sobre a versão MAIS RECENTE de cada pessoa.
+  const handleConfirmar = () => {
+    if (!preview) return;
+    const porId = new Map<string, (typeof preview.itens)[number]>(preview.itens.map(i => [i.id, i] as [string, (typeof preview.itens)[number]]));
+    const antes = new Map<string, Record<string, unknown>>();
+    const nomes: string[] = [];
+    const atualizadas = people.map(p => {
+      const item = porId.get(p.id);
+      if (!item) return p;
+      const depois = aplicarAtualizacao(p, item.atualizacao);
+      const camposAnteriores: Record<string, unknown> = {};
+      new Set([...Object.keys(p), ...Object.keys(depois)]).forEach(k => {
+        if (JSON.stringify((p as any)[k]) !== JSON.stringify((depois as any)[k])) camposAnteriores[k] = (p as any)[k];
+      });
+      antes.set(p.id, camposAnteriores);
+      nomes.push(p.nome);
+      return depois;
+    });
+    onUpdatePeople(atualizadas);
+    setPreviousPeopleSnapshot(antes);
+    setSuccessResponse({ explanation: preview.explanation, updatedCount: antes.size, affectedNames: nomes });
+    setPreview(null);
+    setPrompt('');
+  };
+
+  const handleCancelarPreview = () => {
+    setPreview(null);
+  };
+
+  // Desfaz só as pessoas que a IA alterou, sem mexer nas outras.
   const handleUndo = () => {
     if (previousPeopleSnapshot) {
-      onUpdatePeople(previousPeopleSnapshot);
+      onUpdatePeople(people.map(p => {
+        const camposAnteriores = previousPeopleSnapshot.get(p.id);
+        return camposAnteriores ? ({ ...p, ...camposAnteriores } as Person) : p;
+      }));
       setPreviousPeopleSnapshot(null);
       setSuccessResponse(null);
       setError(null);
@@ -286,6 +255,7 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
   useEffect(() => {
     setSuccessResponse(null);
     setError(null);
+    setPreview(null);
   }, [activeTab]);
 
   return (
@@ -335,7 +305,7 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
               <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
               <div>
                 Você está na tela de <strong className="text-teal-700 dark:text-teal-400">{tabLabel}</strong>. 
-                Os comandos abaixo alteram a base de membros em tempo real.
+                A IA mostra uma prévia e nada é salvo até você confirmar.
               </div>
             </div>
 
@@ -405,6 +375,48 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
                 <div>
                   <h5 className="font-bold">Ocorreu um erro</h5>
                   <p className="mt-0.5 leading-relaxed">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Prévia: nada é salvo até confirmar */}
+            {preview && (
+              <div className="space-y-2" id="ai-preview">
+                <div className="p-3 rounded-xl border border-amber-200/70 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 text-xxs">
+                  <h5 className="font-bold">Confira antes de salvar ({preview.itens.length} pessoa{preview.itens.length > 1 ? 's' : ''})</h5>
+                  <p className="mt-0.5 leading-relaxed">{preview.explanation}</p>
+                </div>
+                <div className={`p-2 rounded-lg max-h-48 overflow-y-auto border text-[10px] leading-relaxed space-y-1.5 ${
+                  isDark ? 'bg-zinc-950 border-zinc-800 text-zinc-300' : 'bg-slate-50 border-slate-100 text-slate-600'
+                }`}>
+                  {preview.itens.map(item => (
+                    <div key={item.id}>
+                      <div className="font-bold truncate">{item.nome}</div>
+                      {item.linhas.map((l, i) => <div key={i} className="pl-2 font-mono text-[9px]">• {l}</div>)}
+                    </div>
+                  ))}
+                </div>
+                {preview.ignorados.length > 0 && (
+                  <details className="text-[9px] text-zinc-500">
+                    <summary className="cursor-pointer">{preview.ignorados.length} sugestão(ões) inválida(s) descartada(s)</summary>
+                    {preview.ignorados.map((m, i) => <div key={i} className="pl-2">• {m}</div>)}
+                  </details>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelarPreview}
+                    className="flex-1 py-2 rounded-xl text-xxs font-bold border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmar}
+                    className="flex-1 py-2 rounded-xl text-xxs font-bold bg-teal-600 hover:bg-teal-700 text-white cursor-pointer"
+                  >
+                    Confirmar e salvar
+                  </button>
                 </div>
               </div>
             )}
