@@ -101,7 +101,8 @@ export default function AIBulkEditor({ people, onUpdatePeople, activeTab, isDark
         },
         body: JSON.stringify({
           prompt,
-          people,
+          // Sem fotos: deixavam o envio pesado demais (limite de 4,5 MB da Vercel).
+          people: people.map(({ fotoUrl, ...resto }) => resto),
           viewContext: activeTab
         })
       });

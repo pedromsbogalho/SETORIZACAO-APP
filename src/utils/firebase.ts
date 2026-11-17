@@ -15,7 +15,9 @@ import {
   deleteDoc,
   getDocFromServer,
   onSnapshot,
-  updateDoc
+  updateDoc,
+  deleteField,
+  connectFirestoreEmulator
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -25,6 +27,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  connectAuthEmulator,
   User
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -54,6 +57,14 @@ const app = initializeApp({
 // We use a let-binding for db to allow fallback to the '(default)' database
 export let db = getFirestore(app, firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
+
+// Desenvolvimento/testes: VITE_USE_FIREBASE_EMULATORS=true conecta aos emuladores
+// locais (Auth 9099, Firestore 8080) em vez do projeto real.
+const usarEmuladores = metaEnv.VITE_USE_FIREBASE_EMULATORS === 'true';
+if (usarEmuladores) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+}
 
 // Helper function to enforce a timeout on asynchronous operations
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 2500): Promise<T> {
@@ -85,7 +96,10 @@ async function testAndRecoverConnection() {
       return;
     }
     console.warn(`Connection to database "${firestoreDatabaseId}" failed:`, error);
-    if (firestoreDatabaseId && firestoreDatabaseId !== '(default)') {
+    // Só troca para o banco "(default)" se o banco configurado NÃO EXISTIR.
+    // Antes trocava em qualquer falha — inclusive lentidão (>1,5 s) — e o app
+    // passava a ler e gravar silenciosamente em outro banco.
+    if (error?.code === 'not-found' && firestoreDatabaseId && firestoreDatabaseId !== '(default)') {
       console.log("Attempting to fall back to '(default)' database...");
       try {
         db = getFirestore(app, '(default)');
@@ -101,7 +115,7 @@ async function testAndRecoverConnection() {
     }
   }
 }
-testAndRecoverConnection();
+if (!usarEmuladores) testAndRecoverConnection();
 
 // --- ERROR HANDLING SPECIFICATION (Section 3 of Skill) ---
 
@@ -255,6 +269,153 @@ export async function savePeopleBatchToFirebase(userId: string, peopleList: Pers
   }
 }
 
+// --- PESSOAS EM TEMPO REAL E GRAVAÇÃO POR CAMPO ---
+
+/**
+ * Escuta a coleção `people` em tempo real. A primeira chamada traz a base
+ * inteira; as seguintes trazem as mudanças feitas por qualquer usuário.
+ * `doServidor` é false quando o Firestore respondeu só com o cache local.
+ */
+export function onPeopleRealtime(
+  onData: (people: Person[], doServidor: boolean) => void,
+  onError: (err: unknown) => void
+): () => void {
+  return onSnapshot(collection(db, 'people'), (snapshot) => {
+    const list: Person[] = [];
+    snapshot.forEach((d) => list.push(d.data() as Person));
+    onData(list, !snapshot.metadata.fromCache);
+  }, onError);
+}
+
+export function onStructureRealtime(
+  onData: (structure: JohreiCenterStructure | null, doServidor: boolean) => void,
+  onError: (err: unknown) => void
+): () => void {
+  return onSnapshot(doc(db, 'structures', STRUCTURE_DOC_ID), (snapshot) => {
+    onData(snapshot.exists() ? (snapshot.data() as JohreiCenterStructure) : null, !snapshot.metadata.fromCache);
+  }, onError);
+}
+
+/** Campos de primeiro nível que mudaram entre duas versões de uma pessoa. */
+export function camposAlterados(anterior: Person, nova: Person): Record<string, unknown> {
+  const alterados: Record<string, unknown> = {};
+  const chaves = new Set([...Object.keys(anterior), ...Object.keys(nova)]);
+  chaves.forEach((chave) => {
+    if (chave === 'id') return;
+    const antes = (anterior as any)[chave];
+    const depois = (nova as any)[chave];
+    if (JSON.stringify(antes) !== JSON.stringify(depois)) {
+      alterados[chave] = depois === undefined ? deleteField() : depois;
+    }
+  });
+  return alterados;
+}
+
+/**
+ * Grava só o que mudou: pessoa nova é criada, pessoa existente recebe só os
+ * campos alterados (updateDoc) e excluída é apagada. Antes cada edição
+ * regravava a ficha inteira e apagava o que outro usuário tivesse mudado
+ * em outros campos da mesma pessoa nesse meio-tempo.
+ * Lotes de até 450 operações (o Firestore aceita no máximo 500).
+ */
+export async function salvarAlteracoesPessoas(
+  anteriores: Map<string, Person>,
+  alteradas: Person[],
+  idsExcluidos: string[] = []
+): Promise<void> {
+  type Operacao = (batch: ReturnType<typeof writeBatch>) => void;
+  const operacoes: Operacao[] = [];
+
+  alteradas.forEach((p) => {
+    const ref = doc(db, 'people', p.id);
+    const anterior = anteriores.get(p.id);
+    if (!anterior) {
+      operacoes.push((b) => b.set(ref, p));
+      return;
+    }
+    const campos = camposAlterados(anterior, p);
+    if (Object.keys(campos).length > 0) {
+      operacoes.push((b) => b.update(ref, campos));
+    }
+  });
+  idsExcluidos.forEach((id) => operacoes.push((b) => b.delete(doc(db, 'people', id))));
+
+  try {
+    for (let i = 0; i < operacoes.length; i += 450) {
+      const batch = writeBatch(db);
+      operacoes.slice(i, i + 450).forEach((op) => op(batch));
+      await batch.commit();
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'people');
+  }
+}
+
+// --- FOTOS DAS PESSOAS (Firestore, sem Firebase Storage / plano Blaze) ---
+// Uma foto por pessoa em `fotos_pessoas/{personId}`, como data URL JPEG já
+// comprimida no navegador (src/utils/fotoPessoa.ts). Fica FORA do documento
+// `people` porque a lista de pessoas inteira é lida por todos, guardada no
+// navegador (limite ~5 MB) e enviada à IA — com fotos dentro, isso estourava.
+
+export interface FotoPessoa {
+  personId: string;
+  dataUrl: string;
+  atualizadoEm: string;
+  atualizadoPor: string;
+}
+
+/** Escuta a foto de UMA pessoa (só baixa a foto de quem está aberto na tela). */
+export function onFotoPessoaRealtime(personId: string, callback: (dataUrl: string | null) => void): () => void {
+  return onSnapshot(doc(db, 'fotos_pessoas', personId), (snapshot) => {
+    const data = snapshot.exists() ? (snapshot.data() as FotoPessoa) : null;
+    callback(data?.dataUrl || null);
+  }, (err) => {
+    console.error(`Erro ao ler a foto de ${personId}:`, err);
+    callback(null);
+  });
+}
+
+export async function salvarFotoPessoa(personId: string, dataUrl: string, atualizadoPor: string): Promise<void> {
+  const foto: FotoPessoa = { personId, dataUrl, atualizadoEm: new Date().toISOString(), atualizadoPor };
+  try {
+    await setDoc(doc(db, 'fotos_pessoas', personId), foto);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `fotos_pessoas/${personId}`);
+  }
+}
+
+export async function removerFotoPessoa(personId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'fotos_pessoas', personId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `fotos_pessoas/${personId}`);
+  }
+}
+
+/**
+ * Migração: move as fotos gravadas no campo `fotoUrl` do cadastro (versão
+ * anterior) para `fotos_pessoas` e só então apaga o campo do cadastro.
+ * Se a gravação da foto falhar (ex.: regras ainda não publicadas), o cadastro
+ * fica como está. Idempotente — pode rodar em vários navegadores ao mesmo tempo.
+ */
+export async function migrarFotosDoCadastro(people: Person[], atualizadoPor: string): Promise<number> {
+  let migradas = 0;
+  for (const p of people) {
+    const dataUrl = (p as any).fotoUrl;
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg')) continue;
+    try {
+      await setDoc(doc(db, 'fotos_pessoas', p.id), {
+        personId: p.id, dataUrl, atualizadoEm: new Date().toISOString(), atualizadoPor
+      } as FotoPessoa);
+      await updateDoc(doc(db, 'people', p.id), { fotoUrl: deleteField() });
+      migradas++;
+    } catch (err) {
+      console.error(`Migração da foto de ${p.id} falhou (o cadastro foi mantido):`, err);
+    }
+  }
+  return migradas;
+}
+
 // --- FAMILIES API (SHARED, though derived dynamically, kept for backward compatibility) ---
 
 export async function fetchFamiliesFromFirebase(userId: string): Promise<Family[]> {
@@ -337,21 +498,23 @@ export async function saveStructureToFirebase(userId: string, structure: JohreiC
 
 // --- RESET ALL DATA API (SHARED) ---
 
+async function apagarColecaoEmLotes(nome: string): Promise<void> {
+  const snap = await getDocs(collection(db, nome));
+  const ids = snap.docs.map(d => d.id);
+  // O Firestore aceita no máximo 500 operações por lote; antes era um lote só
+  // e a limpeza falhava com mais de 500 pessoas.
+  for (let i = 0; i < ids.length; i += 450) {
+    const batch = writeBatch(db);
+    ids.slice(i, i + 450).forEach(id => batch.delete(doc(db, nome, id)));
+    await batch.commit();
+  }
+}
+
 export async function clearAllFirebaseData(userId: string): Promise<void> {
   try {
-    const peopleSnap = await getDocs(collection(db, 'people'));
-    const peopleBatch = writeBatch(db);
-    peopleSnap.forEach(d => {
-      peopleBatch.delete(doc(db, 'people', d.id));
-    });
-    await peopleBatch.commit();
-
-    const familiesSnap = await getDocs(collection(db, 'families'));
-    const familiesBatch = writeBatch(db);
-    familiesSnap.forEach(d => {
-      familiesBatch.delete(doc(db, 'families', d.id));
-    });
-    await familiesBatch.commit();
+    await apagarColecaoEmLotes('people');
+    await apagarColecaoEmLotes('families');
+    await apagarColecaoEmLotes('fotos_pessoas');
 
     await deleteDoc(doc(db, 'structures', STRUCTURE_DOC_ID));
   } catch (err) {

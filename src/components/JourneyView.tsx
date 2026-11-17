@@ -5,7 +5,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Person, JornadaEtapa, JornadaMembro, CursosNivelIgreja, ComentarioJornada } from '../types';
-import { CheckCircle, Calendar, Sparkles, User, ChevronRight, HelpCircle, AlertCircle, Clock, Heart, Award, BookOpen, Sprout, DollarSign, Activity, FileText, Check, Plus, Minus, Users, MessageSquare, Send, Trash2 } from 'lucide-react';
+import { CheckCircle, Calendar, Sparkles, User, ChevronRight, HelpCircle, AlertCircle, Clock, Heart, Award, BookOpen, Sprout, DollarSign, Activity, FileText, Check, Plus, Minus, Users, MessageSquare, Send, Trash2, Loader2 } from 'lucide-react';
+import { onFotoPessoaRealtime, salvarFotoPessoa, removerFotoPessoa } from '../utils/firebase';
+import { comprimirFotoPessoa } from '../utils/fotoPessoa';
 
 interface JourneyViewProps {
   people: Person[];
@@ -212,45 +214,57 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
     }
   };
 
-  // ---- Foto da pessoa (Base64 no Firestore, sem Firebase Storage / plano Blaze) ----
+  // ---- Foto da pessoa ----
+  // Guardada na coleção própria `fotos_pessoas` (sem Firebase Storage / plano
+  // Blaze) e baixada só para a pessoa aberta. O campo fotoUrl do cadastro é o
+  // formato antigo, lido só até a migração automática (App.tsx).
   const fotoInputRef = React.useRef<HTMLInputElement>(null);
   const [fotoError, setFotoError] = useState('');
+  const [fotoSelecionada, setFotoSelecionada] = useState<string | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
 
-  const handleFotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    setFotoSelecionada(null);
+    setFotoError('');
+    if (!selectedPerson?.id) return;
+    return onFotoPessoaRealtime(selectedPerson.id, setFotoSelecionada);
+  }, [selectedPerson?.id]);
+
+  const fotoAtual = fotoSelecionada || selectedPerson?.fotoUrl || '';
+
+  const handleFotoSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = ''; // permite escolher o mesmo arquivo de novo
     setFotoError('');
     if (!file || !selectedPerson) return;
-    if (!file.type.startsWith('image/')) {
-      setFotoError('Selecione um arquivo de imagem.');
-      return;
+    const personId = selectedPerson.id;
+    setEnviandoFoto(true);
+    try {
+      const dataUrl = await comprimirFotoPessoa(file);
+      await salvarFotoPessoa(personId, dataUrl, currentUserName || currentUserEmail || '');
+    } catch (err) {
+      console.error('Erro ao salvar foto:', err);
+      const msg = err instanceof Error && !err.message.startsWith('{') ? err.message : 'Verifique a conexão e tente de novo.';
+      setFotoError(`Não foi possível salvar a foto. ${msg}`);
+    } finally {
+      setEnviandoFoto(false);
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new window.Image();
-      img.onload = () => {
-        // Redimensiona p/ 128x128 (mantém proporção) e comprime em JPEG ~ reduz para poucos KB
-        const size = 128;
-        const scale = Math.min(size / img.width, size / img.height, 1);
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        if (dataUrl.length > 300000) {
-          setFotoError('Imagem muito grande. Tente outra menor.');
-          return;
-        }
-        onUpdatePeople(people.map(p => p.id === selectedPerson.id ? { ...p, fotoUrl: dataUrl } : p));
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-    event.target.value = '';
   };
 
-  const handleRemoverFoto = () => {
+  const handleRemoverFoto = async () => {
     if (!selectedPerson) return;
-    onUpdatePeople(people.map(p => p.id === selectedPerson.id ? { ...p, fotoUrl: '' } : p));
+    if (!confirm(`Remover a foto de ${selectedPerson.nome}?`)) return;
+    setFotoError('');
+    try {
+      await removerFotoPessoa(selectedPerson.id);
+      if (selectedPerson.fotoUrl) {
+        // Foto ainda no formato antigo (dentro do cadastro): apaga o campo também.
+        onUpdatePeople(people.map(p => p.id === selectedPerson.id ? { ...p, fotoUrl: undefined } : p));
+      }
+    } catch (err) {
+      console.error('Erro ao remover foto:', err);
+      setFotoError('Não foi possível remover a foto. Verifique a conexão e tente de novo.');
+    }
   };
 
   const handleToggleStep = (step: JornadaEtapa, completed: boolean) => {
@@ -415,10 +429,10 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
             {/* Header selection card */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-200/40 dark:border-white/5 gap-4">
               <div className="flex items-center gap-3 relative">
-                {selectedPerson.fotoUrl ? (
+                {fotoAtual ? (
                   <div className="relative group">
                     <img
-                      src={selectedPerson.fotoUrl}
+                      src={fotoAtual}
                       alt={selectedPerson.nome}
                       className="w-14 h-14 rounded-full object-cover border-2 border-teal-500/60 shadow-sm"
                     />
@@ -436,7 +450,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                     title="Adicionar foto"
                     className="p-2.5 rounded-full bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400 hover:ring-2 hover:ring-teal-400/50 transition-all cursor-pointer"
                   >
-                    <User className="w-6 h-6" />
+                    {enviandoFoto ? <Loader2 className="w-6 h-6 animate-spin" /> : <User className="w-6 h-6" />}
                   </button>
                 )}
                 <input
@@ -446,7 +460,7 @@ export default function JourneyView({ people, onUpdatePeople, isDark, currentUse
                   className="hidden"
                   onChange={handleFotoSelect}
                 />
-                {selectedPerson.fotoUrl && (
+                {fotoAtual && !enviandoFoto && (
                   <button
                     onClick={() => fotoInputRef.current?.click()}
                     title="Trocar foto"
