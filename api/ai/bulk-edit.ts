@@ -7,10 +7,12 @@ import { GoogleGenAI } from "@google/genai";
 // REST do Firestore usando o token dele. O Firestore valida o token (assinatura,
 // validade, projeto) e as regras de segurança — se o token for falso, a leitura falha.
 // projectId e databaseId não são segredos (já vão no JavaScript do navegador).
+// Valores padrão = projeto atual (o mesmo de firebase-applet-config.json).
+// Se o projeto mudar de novo, atualize os dois lugares ou defina as variáveis na Vercel.
 const FIREBASE_PROJECT_ID =
-  process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'project-5c707c77-a3d7-4999-882';
+  process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'setorizaapp';
 const FIRESTORE_DATABASE_ID =
-  process.env.FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID || 'ai-studio-0703a7bd-0c96-4411-94f0-747479362cad';
+  process.env.FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID || '(default)';
 
 export interface ResultadoAutenticacao {
   ok: boolean;
