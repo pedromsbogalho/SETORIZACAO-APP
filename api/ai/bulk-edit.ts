@@ -70,222 +70,192 @@ export async function verificarUsuarioAprovado(authorizationHeader: unknown): Pr
   return { ok: true, status: 200, uid, role };
 }
 
-function parseYearValue(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
+// --- Edição em massa com IA ---
+// Única versão das instruções e da chamada ao Gemini: usada pela Vercel (handler
+// abaixo) e pelo servidor local (server.ts). Antes havia duas cópias diferentes,
+// e o teste local se comportava diferente da produção.
 
-  const text = String(value).trim();
-  if (!text) return null;
+// Campos que a IA pode alterar. Mesma lista de src/utils/edicaoIA.ts (o
+// navegador valida de novo os valores antes de mostrar a prévia).
+const CAMPOS_PERMITIDOS = [
+  'tipoCadastro', 'subtipoCadastro', 'statusAtual', 'idade', 'tempoMembro',
+  'setor2', 'am', 'af2', 'celularPrincipal', 'dataOutorga', 'anoOutorga',
+  'jornadaEtapa', 'cursoIniciacao', 'cursoPosOutorga',
+];
 
-  const matchYMD = text.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (matchYMD) return Number(matchYMD[1]);
+const MAX_PROMPT = 2000;
 
-  const matchDMY = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (matchDMY) return Number(matchDMY[3]);
-
-  const matchYearOnly = text.match(/\b(19|20)\d{2}\b/);
-  if (matchYearOnly) return Number(matchYearOnly[0]);
-
-  return null;
+function dataISO(valor: unknown): string {
+  if (typeof valor !== 'string') return '';
+  const t = valor.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const br = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return br ? `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}` : '';
 }
 
-function getPersonOutorgaYear(person: any): number | null {
-  return parseYearValue(person?.dataOutorga) ?? parseYearValue(person?.anoOutorga) ?? null;
-}
-
-function getFallbackBulkEditUpdates(prompt: string, people: any[], viewContext?: string) {
-  const normalizedPrompt = prompt.toLowerCase();
-  const mentionsPostOutorga = /pós-outorga|pos-outorga|pós outorga|pos outorga|curso pós|curso pos|pós-?outorga/.test(normalizedPrompt);
-  const mentionsReset = /(não iniciou|nao iniciou|sem conclus|sem conclusão|sem conclusao|resetar|reset)/.test(normalizedPrompt);
-  const mentionsConcluded = /(conclu(?:í|i)da|concluida|concluído|concluido)/.test(normalizedPrompt);
-  const mentionsInProgress = /(em andamento|em-andamento|andamento)/.test(normalizedPrompt);
-
-  if (!mentionsPostOutorga || !mentionsReset) {
-    return null;
-  }
-
-  const targetStatus = mentionsConcluded ? 'Concluído' : mentionsInProgress ? 'Em andamento' : 'Não iniciou';
-  const requestedLessons = [1, 2, 3, 4, 5];
-  const yearMatch = prompt.match(/\b(19|20)\d{2}\b/);
-  const thresholdYear = yearMatch ? Number(yearMatch[0]) : null;
-
-  const matchedPeople = people.filter((person: any) => {
-    if (!mentionsPostOutorga) return false;
-
-    if (thresholdYear !== null) {
-      const personYear = getPersonOutorgaYear(person);
-      if (personYear === null) return false;
-      return personYear >= thresholdYear;
-    }
-
-    return true;
+function aulasConcluidas(curso: any): number[] {
+  const aulas = curso?.aulas || {};
+  return [1, 2, 3, 4, 5].filter((n) => {
+    const v = String(aulas[n] ?? aulas[String(n)] ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return v === 'concluido';
   });
+}
 
-  if (matchedPeople.length === 0) {
+/**
+ * Monta o resumo enviado ao Gemini. Celular e endereço (dados pessoais) só vão
+ * quando o pedido fala deles; antes iam sempre, em toda edição.
+ */
+export function resumirPessoas(people: any[], prompt: string) {
+  const falaDeContato = /celular|telefone|whats|n[uú]mero|contato/i.test(prompt);
+  const falaDeEndereco = /endere[cç]|bairro|\brua\b|mora|resid|cidade|avenida|\bav\./i.test(prompt);
+  return people.map((p: any) => {
+    const dataOutorga = dataISO(p.dataOutorga);
+    const anoNum = Number(String(p.anoOutorga ?? '').match(/\d{4}/)?.[0]);
     return {
-      success: true,
-      explanation: 'Nenhum membro correspondeu aos critérios informados. Nenhuma alteração foi realizada.',
-      updates: []
+      id: String(p.id),
+      nome: p.nome,
+      tipoCadastro: p.tipoCadastro,
+      subtipoCadastro: p.subtipoCadastro,
+      statusAtual: p.statusAtual,
+      setor2: p.setor2,
+      am: p.am,
+      af2: p.af2,
+      idade: p.idade,
+      tempoMembro: p.tempoMembro,
+      jornadaEtapa: p.jornadaEtapa,
+      dataOutorga,
+      anoOutorga: anoNum || (dataOutorga ? Number(dataOutorga.slice(0, 4)) : null),
+      posOutorgaAulasConcluidas: aulasConcluidas(p.cursoPosOutorga),
+      iniciacaoAulasConcluidas: aulasConcluidas(p.cursoIniciacao),
+      ...(falaDeContato ? { celularPrincipal: p.celularPrincipal } : {}),
+      ...(falaDeEndereco ? { endCompleto: p.endCompleto } : {}),
     };
+  });
+}
+
+const SYSTEM_INSTRUCTION = `Você é o assistente de edição em massa do app de gestão do Johrei Center.
+Recebe um pedido em português e a lista de pessoas (peopleSummary). Identifique QUAIS pessoas o pedido atinge e QUAIS campos mudam.
+
+Campos que você pode alterar (nenhum outro):
+- 'tipoCadastro' (ex: 'Ohikari', 'Frequente', 'Primeiro Contato')
+- 'subtipoCadastro': 'MEMBRO' ou 'FREQUENTADOR'
+- 'statusAtual': 'ATIVO', 'INATIVO', 'AFASTADO' ou 'FALECIDO'
+- 'idade' (número inteiro)
+- 'tempoMembro' (texto, ex: '5 anos')
+- 'setor2' (texto em maiúsculas, ex: 'SUL', 'CENTRO-NORTE', 'LESTE')
+- 'am' (nome do Assistente de Ministro), 'af2' (nome do Assistente de Família)
+- 'celularPrincipal' (texto)
+- 'dataOutorga' (formato 'AAAA-MM-DD'), 'anoOutorga' (número)
+- 'jornadaEtapa': exatamente uma de 'Primeiro atendimento', 'Recebe Johrei', 'Curso de Iniciação', 'Ingressa', 'Recebe Ohikari', 'Curso Pós-Outorga', 'Conclui Pós-Outorga', 'Torna-se membro ativo'
+- 'cursoPosOutorga': { "aulas": { "1": "Concluído" | "Não iniciou", ... } } — inclua só as aulas que mudam. NÃO existe "Em andamento".
+- 'cursoIniciacao': { "aulas": { "1": "Concluído" | "Não iniciado", ... } } — inclua só as aulas que mudam.
+
+No peopleSummary, as aulas aparecem como listas de aulas concluídas (posOutorgaAulasConcluidas, iniciacaoAulasConcluidas).
+
+REGRAS:
+1. Retorne apenas as pessoas que precisam mudar, com apenas os campos que mudam. Se ninguém se encaixar, 'updates' vazio.
+2. Nunca altere nem invente 'id'. Use exatamente o 'id' recebido.
+3. Datas: 'dataOutorga' vem em 'AAAA-MM-DD' e 'anoOutorga' como número. Converta datas do pedido ('DD/MM/AAAA') para 'AAAA-MM-DD' antes de comparar.
+   Respeite exatamente a direção do pedido: "antes de 2020" = ano < 2020; "a partir de 2020" = ano >= 2020; "depois de 2020" = ano > 2020.
+   Pessoa sem data/ano de outorga NÃO entra em filtros por outorga.
+4. Se o pedido for ambíguo ou perigoso (ex.: alterar todo mundo sem critério claro), retorne success=false e explique em 'explanation' o que precisa ser esclarecido.
+5. Responda em JSON com:
+   - 'success': boolean
+   - 'explanation': uma frase simples em português dizendo o que será alterado e em quantas pessoas
+   - 'updates': lista de { "id": string, "updates": objeto com os campos }`;
+
+export interface ResultadoEdicao {
+  status: number;
+  body: any;
+}
+
+/** Valida o pedido, chama o Gemini e filtra a resposta. */
+export async function processarEdicaoEmMassa(body: any): Promise<ResultadoEdicao> {
+  const { prompt, people, viewContext } = body || {};
+  if (typeof prompt !== 'string' || !prompt.trim() || !Array.isArray(people)) {
+    return { status: 400, body: { error: "Faltam parâmetros obrigatórios: 'prompt' e 'people'" } };
+  }
+  if (prompt.length > MAX_PROMPT) {
+    return { status: 400, body: { error: `O comando é longo demais (máximo de ${MAX_PROMPT} caracteres).` } };
   }
 
-  const updates = matchedPeople.map((person: any) => {
-    const aulas: Record<string, string> = {};
-    requestedLessons.forEach((lessonNumber) => {
-      aulas[String(lessonNumber)] = targetStatus;
-    });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { status: 500, body: { error: "GEMINI_API_KEY não está configurada no servidor (na Vercel: Settings → Environment Variables)." } };
+  }
 
-    return {
-      id: person.id,
-      updates: {
-        cursoPosOutorga: {
-          aulas
-        }
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+  const response = await ai.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: [{ text: JSON.stringify({ prompt, viewContext, peopleSummary: resumirPessoas(people, prompt) }) }],
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          success: { type: "BOOLEAN" },
+          explanation: { type: "STRING" },
+          updates: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                id: { type: "STRING" },
+                updates: { type: "OBJECT", description: "Campos a alterar nesta pessoa." }
+              },
+              required: ["id", "updates"]
+            }
+          }
+        },
+        required: ["success", "explanation", "updates"]
       }
-    };
+    }
   });
 
-  const yearSuffix = thresholdYear ? ` para outorgados a partir de ${thresholdYear}` : '';
+  let resultado: any;
+  try {
+    resultado = JSON.parse(response.text || '{}');
+  } catch {
+    return { status: 502, body: { error: 'A IA devolveu uma resposta inválida. Tente reformular o pedido.' } };
+  }
+  return { status: 200, body: filtrarResposta(resultado, people) };
+}
+
+/** Só pessoas que existem no pedido e só campos permitidos. */
+export function filtrarResposta(resultado: any, people: any[]) {
+  const idsValidos = new Set(people.map((p: any) => String(p.id)));
+  const vistos = new Set<string>();
+  const updates = (Array.isArray(resultado?.updates) ? resultado.updates : [])
+    .filter((u: any) => u && idsValidos.has(String(u.id)) && !vistos.has(String(u.id)) && vistos.add(String(u.id)))
+    .map((u: any) => {
+      const campos: Record<string, unknown> = {};
+      Object.entries(u.updates || {}).forEach(([k, v]) => {
+        const raiz = k.split(/[.[]/)[0];
+        if (CAMPOS_PERMITIDOS.includes(raiz)) campos[k] = v;
+      });
+      return { id: String(u.id), updates: campos };
+    })
+    .filter((u: any) => Object.keys(u.updates).length > 0);
   return {
-    success: true,
-    explanation: `Atualizei o progresso de ${matchedPeople.length} pessoa(s) para ${targetStatus.toLowerCase()} no curso pós-outorga${yearSuffix}.`,
-    updates
+    success: resultado?.success === true,
+    explanation: typeof resultado?.explanation === 'string' ? resultado.explanation : '',
+    updates,
   };
 }
 
 export default async function handler(req: any, res: any) {
-  // Sem cabeçalhos CORS: o app chama esta rota do mesmo domínio, então não é
-  // preciso (e antes o "Access-Control-Allow-Origin: *" liberava qualquer site).
+  // Sem cabeçalhos CORS: o app chama esta rota do mesmo domínio.
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
-
   try {
     const autenticacao = await verificarUsuarioAprovado(req.headers?.authorization);
     if (!autenticacao.ok) {
       return res.status(autenticacao.status).json({ error: autenticacao.error });
     }
-
-    const { prompt, people, viewContext } = req.body;
-    if (!prompt || !people) {
-      return res.status(400).json({ error: "Faltam parâmetros obrigatórios: 'prompt' e 'people'" });
-    }
-
-    const fallbackResponse = getFallbackBulkEditUpdates(prompt, people, viewContext);
-    if (fallbackResponse) {
-      return res.status(200).json(fallbackResponse);
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ 
-        error: "GEMINI_API_KEY não está configurada na Vercel. Por favor, adicione a variável de ambiente 'GEMINI_API_KEY' com sua chave de API nas configurações do projeto na Vercel (Settings -> Environment Variables)." 
-      });
-    }
-
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-
-    const systemInstruction = `Você é um Assistente Inteligente de edição em massa de dados para o aplicativo do Johrei Center.
-O usuário enviará uma instrução de texto em português e a lista atualizada de membros/pessoas. Seu trabalho é processar e identificar quais registros devem sofrer alterações e quais campos devem ser alterados.
-
-Campos que você pode alterar dependendo do pedido:
-- 'tipoCadastro' (ex: 'Ohikari', 'Frequente', 'Primeiro Contato')
-- 'subtipoCadastro' (ex: 'MEMBRO', 'FREQUENTADOR')
-- 'statusAtual' (ex: 'ATIVO', 'INATIVO', 'AFASTADO')
-- 'idade' (number)
-- 'tempoMembro' (string, ex: '5 anos', '6 meses')
-- 'setor2' (string, ex: 'SUL', 'CENTRO-NORTE', 'LESTE', 'ILHA BELA', 'INDAIÁ-SERRA', 'SÃO SEBASTIÃO')
-- 'am' (string, nome do Assistente de Ministro)
-- 'af2' (string, nome do Assistente de Família)
-- 'celularPrincipal' (string, celular)
-- 'dataOutorga' (string, ex: '15/05/2023')
-- 'anoOutorga' (number ou string, ex: 2023)
-- 'jornadaEtapa' (ex: 'Primeiro atendimento', 'Recebe Johrei', 'Curso de Iniciação', 'Ingressa', 'Recebe Ohikari', 'Curso Pós-Outorga', 'Conclui Pós-Outorga', 'Torna-se membro ativo')
-- 'cursoPosOutorga': objeto contendo as aulas de 1 a 5. Exemplo de estrutura:
-  "cursoPosOutorga": {
-    "aulas": {
-      "1": "Concluído",
-      "2": "Não iniciou",
-      "3": "Não iniciou",
-      "4": "Não iniciou",
-      "5": "Não iniciou"
-    }
-  }
-  Valores possíveis para cada aula: 'Não iniciou', 'Em andamento', 'Concluído'.
-
-ATENÇÃO ÀS REGRAS:
-1. Retorne apenas os registros que precisarem de alteração. Se nenhum registro corresponder, retorne um array vazio de updates.
-2. Não altere o 'id' das pessoas de forma alguma. O 'id' deve ser preservado exatamente como recebido para mapearmos corretamente na volta.
-3. Se a solicitação pedir por exemplo "Deixe todos os membros com data de outorga superior a 2024 com a aula 1 e 2 concluída", você deve analisar a 'dataOutorga' (analisando o ano no formato DD/MM/YYYY) ou 'anoOutorga', e para os registros condizentes, atualizar cursoPosOutorga.aulas["1"] para "Concluído" e cursoPosOutorga.aulas["2"] para "Concluído".
-4. Retorne um JSON válido com três propriedades:
-   - 'success': boolean indicando se a IA entendeu e conseguiu processar com sucesso.
-   - 'explanation': uma frase em português explicando de forma simples, humilde e simpática o que foi alterado e em quantas pessoas. (Ex: "Atualizei as aulas 1 e 2 para concluídas em 4 membros que foram outorgados após 2024.")
-   - 'updates': array contendo objetos com '{ id: string, updates: object }' onde 'updates' possui apenas os campos a serem mesclados no registro original.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: [
-        {
-          text: JSON.stringify({
-            prompt,
-            viewContext,
-            peopleSummary: people.map((p: any) => ({
-              id: p.id,
-              nome: p.nome,
-              tipoCadastro: p.tipoCadastro,
-              subtipoCadastro: p.subtipoCadastro,
-              dataOutorga: p.dataOutorga,
-              anoOutorga: p.anoOutorga,
-              setor2: p.setor2,
-              idade: p.idade,
-              tempoMembro: p.tempoMembro,
-              jornadaEtapa: p.jornadaEtapa,
-              cursoPosOutorga: p.cursoPosOutorga,
-              am: p.am,
-              af2: p.af2,
-              celularPrincipal: p.celularPrincipal,
-              endCompleto: p.endCompleto
-            }))
-          })
-        }
-      ],
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            success: { type: "BOOLEAN" },
-            explanation: { type: "STRING" },
-            updates: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  id: { type: "STRING" },
-                  updates: {
-                    type: "OBJECT",
-                    description: "Objeto com propriedades a serem atualizadas no registro."
-                  }
-                },
-                required: ["id", "updates"]
-              }
-            }
-          },
-          required: ["success", "explanation", "updates"]
-        }
-      }
-    });
-
-    const text = response.text || "{}";
-    return res.status(200).json(JSON.parse(text));
-
+    const { status, body } = await processarEdicaoEmMassa(req.body);
+    return res.status(status).json(body);
   } catch (error: any) {
     console.error("AI Bulk Edit Vercel Error:", error);
     return res.status(500).json({ error: error.message || "Falha ao processar edição inteligente." });
